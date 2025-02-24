@@ -11,10 +11,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") } // تم إضافة مستودع JitPack هنا
     }
 }
 
 rootProject.name = "ApplicationAPP"
 include(":app")
-
- 

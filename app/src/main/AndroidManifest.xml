@@ -8,11 +8,14 @@
         </intent>
     </queries>
 
-    <!-- السماح باستخدام الكاميرا -->
-    <uses-permission android:name="android.permission.CAMERA" />
-
     <!-- إذن الوصول إلى الإنترنت (مهم لـ Firebase) -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- إذن استخدام الكاميرا -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- إذن قراءة التخزين الخارجي (ضروري لتحويل URI إلى ملف) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <!-- تحديد أن الكاميرا ليست مطلوبة لجميع الأجهزة -->
     <uses-feature

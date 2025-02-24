@@ -18,16 +18,17 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             ApplicationAPPTheme {
                 val navController = rememberNavController()
-                val repository = ProductRepository(FirebaseFirestore.getInstance()) // ✅ تمرير repository
+                val repository = ProductRepository(FirebaseFirestore.getInstance())
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    // يتم تمرير innerPadding إلى NavigationGraph عبر تعديل الـ modifier
                     NavigationGraph(
                         navController = navController,
-                        repository = repository // ✅ تمرير repository إلى NavigationGraph
+                        repository = repository,
+                        modifier = Modifier.padding(innerPadding)
                     )
                 }
             }

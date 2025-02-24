@@ -46,6 +46,8 @@ android {
 }
 
 dependencies {
+    implementation("com.cloudinary:cloudinary-android:1.29.0") {
+        exclude(group = "com.linkedin.android.litr", module = "litr")}
     implementation("io.coil-kt:coil-compose:2.2.2")
 
     // ✅ Coroutines

@@ -2,6 +2,7 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") } // إضافة JitPack هنا أيضًا
     }
     dependencies {
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25") // ✅ متوافق مع Compose 1.5.15

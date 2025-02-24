@@ -1,51 +1,65 @@
 package com.example.applicationapp.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.Alignment // ✅ إضافة الاستيراد الصحيح
-import com.example.applicationapp.repository.ProductRepository
-import kotlinx.coroutines.launch
+import androidx.navigation.NavController
+import coil.compose.rememberAsyncImagePainter
+import com.example.applicationapp.viewmodel.ProductViewModel
 
 @Composable
-fun ProductDetailsScreen(productId: String?, repository: ProductRepository) {
-    val scope = rememberCoroutineScope()
-    var priceList by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+fun ProductDetailsScreen(
+    navController: NavController,
+    viewModel: ProductViewModel,
+    productId: String
+) {
+    // استرجاع قائمة المنتجات من الـ ViewModel
+    val products by viewModel.productList.collectAsState(initial = emptyList())
+    // البحث عن المنتج باستخدام productId
+    val product = products.find { it.id == productId }
 
-    LaunchedEffect(productId) {
-        scope.launch {
-            if (!productId.isNullOrEmpty()) {
-                val product = repository.getProductById(productId)
-                product?.let {
-                    priceList = listOf(
-                        "متجر A" to it.price,
-                        "متجر B" to it.price * 1.05,
-                        "متجر C" to it.price * 0.95
-                    )
+    Scaffold { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            product?.let {
+                Text(text = it.name, style = MaterialTheme.typography.headlineMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                Image(
+                    painter = rememberAsyncImagePainter(it.imageUrl),
+                    contentDescription = "صورة المنتج",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(200.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = "السعر: ${it.price} DA", style = MaterialTheme.typography.bodyLarge)
+                Text(text = "المتجر: ${it.store}", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = { navController.popBackStack() }) {
+                    Text("رجوع")
                 }
-            }
-            isLoading = false
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text(text = "مقارنة الأسعار", style = MaterialTheme.typography.headlineMedium)
-
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally)) // ✅ إصلاح الخطأ هنا
-        } else {
-            priceList.forEach { (store, price) ->
-                Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = store, style = MaterialTheme.typography.headlineSmall)
-                        Text(text = "السعر: ${price} ريال")
-                    }
+                Spacer(modifier = Modifier.height(16.dp))
+                // زر الانتقال إلى شاشة مقارنة الأسعار
+                Button(onClick = { navController.navigate("compare/$productId") }) {
+                    Text("مقارنة الأسعار")
                 }
+            } ?: run {
+                Text("لم يتم العثور على المنتج.", modifier = Modifier.padding(8.dp))
             }
         }
     }
 }
-
