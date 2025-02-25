@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.example.applicationapp.repository.ProductRepository
 import com.example.applicationapp.screens.NavigationGraph
-import com.example.applicationapp.ui.theme.ApplicationAPPTheme
+import com.example.applicationapp.ui.theme.AppTheme
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -19,7 +19,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            ApplicationAPPTheme {
+            AppTheme {
                 val navController = rememberNavController()
                 val repository = ProductRepository(FirebaseFirestore.getInstance())
 

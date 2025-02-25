@@ -53,6 +53,8 @@ dependencies {
     // ✅ Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
+
 
     // ✅ OkHttp (اختياري للـ Logging)
     implementation("com.squareup.okhttp3:logging-interceptor:4.9.3")
@@ -81,8 +83,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.7.3")) // متوافق مع Kotlin 1.9
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
-    //implementation("com.google.firebase:firebase-analytics-ktx")
-    //implementation("com.google.android.gms:play-services-measurement-api:21.3.0")
+    implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation("com.google.android.gms:play-services-measurement-api:21.3.0")
 
 // متوافق مع Kotlin 1.9
 

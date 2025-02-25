@@ -36,9 +36,8 @@ fun ProductItem(product: Product, navController: NavController) {
             Column {
                 Text(text = product.name, style = MaterialTheme.typography.headlineSmall)
                 Text(text = "السعر: ${product.price} ريال", style = MaterialTheme.typography.bodyLarge)
-                Text(text = "المتجر: ${product.store}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "المتجر: ${product.storeName}", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
 }
-

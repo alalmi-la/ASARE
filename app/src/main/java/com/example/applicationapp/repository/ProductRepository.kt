@@ -1,12 +1,10 @@
 package com.example.applicationapp.repository
 
-
 import kotlinx.coroutines.channels.awaitClose
 import com.example.asare_montagrt.data.model.Product
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
@@ -44,5 +42,18 @@ class ProductRepository @Inject constructor(
 
     suspend fun deleteProduct(productId: String) {
         productsCollection.document(productId).delete().await()
+    }
+
+    // دالة البحث باستخدام الباركود وبيانات المتجر
+    suspend fun getProductByBarcodeAndStore(barcode: String, store: String, storeLocation: String): Product? {
+        val querySnapshot = productsCollection
+            .whereEqualTo("barcode", barcode)
+            .whereEqualTo("storeName", store)
+            .whereEqualTo("storeLocation", storeLocation)
+            .get()
+            .await()
+        return if (querySnapshot.documents.isNotEmpty()) {
+            querySnapshot.documents.first().toObject(Product::class.java)
+        } else null
     }
 }

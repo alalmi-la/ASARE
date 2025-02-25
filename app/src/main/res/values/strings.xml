@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">ApplicationAPP</string>
+    <string name="default_web_client_id">859871452183-omta6i0gk2r1lkb0sba83qog5fe2q3gb.apps.googleusercontent.com</string>
+    <string name="login_title">تسجيل الدخول</string>
+    <string name="email_hint">البريد الإلكتروني</string>
+    <string name="password_hint">كلمة المرور</string>
+    <string name="login_button">تسجيل الدخول</string>
+    <string name="google_signin_button">تسجيل الدخول باستخدام Google</string>
+    <string name="error_login_failed">فشل تسجيل الدخول، حاول مرة أخرى.</string>
 </resources>

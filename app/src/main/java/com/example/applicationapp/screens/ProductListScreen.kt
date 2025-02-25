@@ -11,30 +11,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.applicationapp.viewmodel.ProductViewModel
-import com.example.asare_montagrt.data.model.Product
 import com.example.applicationapp.components.ProductItem
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductListScreen(navController: NavController, viewModel: ProductViewModel) {
     var searchQuery by remember { mutableStateOf("") }
     val products by viewModel.productList.collectAsState(initial = emptyList())
-
     val filteredProducts = products.filter { it.name.contains(searchQuery, ignoreCase = true) }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("قائمة المنتجات", color = MaterialTheme.colorScheme.onPrimary) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primary)
+            )
+        },
         floatingActionButton = {
             Column {
                 FloatingActionButton(
                     onClick = { navController.navigate("addProduct") },
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    containerColor = MaterialTheme.colorScheme.primary
                 ) {
-                    Text("+") // زر إضافة منتج
+                    Text("+", color = MaterialTheme.colorScheme.onPrimary)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 FloatingActionButton(
-                    onClick = { navController.navigate("barcodeScanner") }
+                    onClick = { navController.navigate("barcodeScanner") },
+                    containerColor = MaterialTheme.colorScheme.secondary
                 ) {
-                    Text("📷") // زر مسح الباركود (يمكن استبداله بأيقونة مناسبة)
+                    Text("📷", color = MaterialTheme.colorScheme.onSecondary)
                 }
             }
         }
@@ -45,8 +52,6 @@ fun ProductListScreen(navController: NavController, viewModel: ProductViewModel)
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            Text(text = "قائمة المنتجات", style = MaterialTheme.typography.headlineMedium)
-
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -56,12 +61,12 @@ fun ProductListScreen(navController: NavController, viewModel: ProductViewModel)
                     .padding(vertical = 8.dp),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions.Default,
-                keyboardActions = KeyboardActions(onSearch = { /* يمكن تنفيذ البحث هنا */ })
+                keyboardActions = KeyboardActions(onSearch = { /* تنفيذ البحث */ })
             )
 
             LazyColumn {
                 items(filteredProducts) { product ->
-                    ProductItem(product, navController)
+                    ProductItem(product = product, navController = navController)
                 }
             }
         }

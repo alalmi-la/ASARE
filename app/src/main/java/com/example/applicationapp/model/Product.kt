@@ -4,9 +4,9 @@ data class Product(
     val id: String = "",
     val name: String = "",
     val price: Double = 0.0,
-    val store: String = "",
+    val storeName: String = "",       // تمت إعادة التسمية من "store" إلى "storeName"
+    val storeLocation: String = "",   // خاصية جديدة لموقع المتجر
     val barcode: String = "",
-    val imageUrl: String = "",  // ✅ تم إضافة `imageUrl`
+    val imageUrl: String = "",
     val priceHistory: MutableList<Double> = mutableListOf()
 )
-

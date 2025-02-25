@@ -2,7 +2,8 @@ package com.example.applicationapp.screens
 
 import android.os.Handler
 import android.os.Looper
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -21,27 +22,25 @@ import kotlinx.coroutines.delay
 @Composable
 fun SplashScreen(navController: NavController) {
     var startAnimation by remember { mutableStateOf(false) }
-
     val alphaAnim = animateFloatAsState(
         targetValue = if (startAnimation) 1f else 0f,
-        animationSpec = tween(durationMillis = 1000),
-        label = "fadeAnimation"
+        animationSpec = tween(durationMillis = 1000)
     )
 
     LaunchedEffect(Unit) {
         startAnimation = true
-        delay(2000) // مدة العرض قبل الانتقال
+        delay(2000)
         navController.navigate("login") { popUpTo("splash") { inclusive = true } }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF6200EE)), // لون مميز للخلفية
+            .background(MaterialTheme.colorScheme.primary),
         contentAlignment = Alignment.Center
     ) {
         Image(
-            painter = painterResource(id = R.drawable.icon), // تأكد من وجود الشعار داخل مجلد res/drawable
+            painter = painterResource(id = R.drawable.icon),
             contentDescription = "App Logo",
             modifier = Modifier
                 .size(150.dp)
