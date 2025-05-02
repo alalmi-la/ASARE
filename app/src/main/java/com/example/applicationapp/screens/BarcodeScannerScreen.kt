@@ -1,226 +1,190 @@
-@file:OptIn(androidx.camera.core.ExperimentalGetImage::class)
 package com.example.applicationapp.screens
 
 import android.Manifest
-import android.content.pm.PackageManager
-import android.util.Log
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.util.Size
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
 import androidx.navigation.NavController
-import com.example.applicationapp.repository.ProductRepository
-import com.example.asare_montagrt.data.model.Product
+import com.example.applicationapp.components.BottomNavigationBar
+import com.example.applicationapp.ui.theme.*
+import com.example.applicationapp.viewmodel.ProductViewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.common.InputImage
-import kotlinx.coroutines.launch
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-@OptIn(ExperimentalMaterial3Api::class)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
-fun BarcodeScannerScreen(navController: NavController, repository: ProductRepository) {
+fun BarcodeScannerScreen(
+    navController: NavController,
+    viewModel: ProductViewModel,
+    fromShopping: Boolean = false
+) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val executor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
-    val scope = rememberCoroutineScope()
+    val permissionState = rememberPermissionState(Manifest.permission.CAMERA)
+    val lifecycleOwner = context as LifecycleOwner
+    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+    val previewView = remember { PreviewView(context) }
+    val scannedCode = remember { mutableStateOf("") }
 
-    var hasCameraPermission by remember { mutableStateOf(false) }
-    var scannedBarcode by remember { mutableStateOf<String?>(null) }
-    var showStoreDialog by remember { mutableStateOf(false) }
-    var inputStoreName by remember { mutableStateOf("") }
-    var inputStoreLocation by remember { mutableStateOf("") }
-    var scannedProduct by remember { mutableStateOf<Product?>(null) }
-    var barcodeResult by remember { mutableStateOf<String?>(null) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted -> hasCameraPermission = granted }
-    )
-
+    // طلب إذن الكاميرا
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
-        } else {
-            hasCameraPermission = true
-        }
+        permissionState.launchPermissionRequest()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("مسح الباركود", color = MaterialTheme.colorScheme.onPrimary) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primary)
-            )
-        }
-    ) { innerPadding ->
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(innerPadding)
-            .padding(16.dp)) {
-            if (hasCameraPermission) {
-                CameraPreviewWithBarcodeScanner(
-                    lifecycleOwner = lifecycleOwner,
-                    executor = executor
-                ) { scannedValue ->
-                    Log.d("BarcodeScanner", "Barcode scanned: $scannedValue")
-                    barcodeResult = scannedValue
-                    scannedBarcode = scannedValue
-                    // عرض Dialog لإدخال بيانات المتجر
-                    showStoreDialog = true
+    // عند قراءة باركود
+    LaunchedEffect(scannedCode.value) {
+        if (scannedCode.value.isNotBlank()) {
+            val products = viewModel.productList.value.filter {
+                it.barcode == scannedCode.value
+            }
+            if (products.isNotEmpty()) {
+                if (fromShopping) {
+                    viewModel.addSelectedProduct(products.first())
+                    navController.popBackStack()
+                } else {
+                    navController.navigate("price_list/${scannedCode.value}")
                 }
             } else {
-                Text(text = "يرجى السماح باستخدام الكاميرا لمسح الباركود.")
+                if (fromShopping) {
+                    navController.popBackStack()
+                } else {
+                    navController.navigate("add_product?barcode=${scannedCode.value}&storeName=")
+                }
             }
+        }
+    }
 
-            barcodeResult?.let { code ->
-                Text(text = "الباركود: $code", style = MaterialTheme.typography.bodyLarge)
-            }
+    PricesTheme {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Barcode", color = PricesTextPrimary) },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = PricesTextPrimary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PricesBackgroundColor)
+                )
+            },
+            bottomBar = {
+                BottomNavigationBar(navController)
+            },
+            containerColor = PricesBackgroundColor
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // الكاميرا
+                AndroidView(factory = { previewView })
 
-            scannedProduct?.let { product ->
-                Text(text = "المنتج: ${product.name}", style = MaterialTheme.typography.bodyLarge)
-                Text(text = "السعر: ${product.price} ريال", style = MaterialTheme.typography.bodyLarge)
-                Text(text = "المتجر: ${product.storeName}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "الموقع: ${product.storeLocation}", style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = { navController.navigate("productDetails/${product.id}") },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth()
+                // Overlay مستطيل شفاف
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.3f))
+                )
+
+                // مربع السكان
+                Box(
+                    modifier = Modifier
+                        .size(250.dp)
+                        .clipToBounds()
+                        .background(Color.Transparent)
+                        .border(2.dp, PricesSelectedIconColor, RoundedCornerShape(8.dp))
+                )
+
+                // نص التعليمات
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("عرض تفاصيل المنتج", color = MaterialTheme.colorScheme.onPrimary)
+                    Text(
+                        text = "Align the barcode within the frame",
+                        color = PricesTextPrimary,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+                    )
                 }
             }
         }
     }
 
-    if (showStoreDialog) {
-        AlertDialog(
-            onDismissRequest = { showStoreDialog = false },
-            title = { Text("أدخل بيانات المتجر") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = inputStoreName,
-                        onValueChange = { inputStoreName = it },
-                        label = { Text("اسم المتجر") }
-                    )
-                    OutlinedTextField(
-                        value = inputStoreLocation,
-                        onValueChange = { inputStoreLocation = it },
-                        label = { Text("موقع المتجر") }
-                    )
+    // إعداد الكاميرا
+    LaunchedEffect(Unit) {
+        val cameraProvider = cameraProviderFuture.get()
+        val preview = Preview.Builder().build().also {
+            it.setSurfaceProvider(previewView.surfaceProvider)
+        }
+
+        val analyzer = ImageAnalysis.Builder()
+            .setTargetResolution(Size(1280, 720))
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+
+        analyzer.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy: ImageProxy ->
+            processImageProxy(imageProxy) { barcodeValue ->
+                if (scannedCode.value.isBlank()) {
+                    scannedCode.value = barcodeValue
                 }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    showStoreDialog = false
-                    scope.launch {
-                        val product = repository.getProductByBarcodeAndStore(
-                            barcode = scannedBarcode!!,
-                            store = inputStoreName,
-                            storeLocation = inputStoreLocation
-                        )
-                        if (product != null) {
-                            scannedProduct = product
-                        } else {
-                            // إذا لم يكن المنتج موجوداً، يتم التوجه إلى شاشة إضافة المنتج مع تمرير البيانات
-                            val route = "addProduct?barcode=${scannedBarcode}&storeName=${inputStoreName}&storeLocation=${inputStoreLocation}"
-                            navController.navigate(route)
-                        }
-                    }
-                },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) { Text("حفظ", color = MaterialTheme.colorScheme.onPrimary) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showStoreDialog = false }) { Text("إلغاء") }
             }
-        )
+        }
+
+        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+        cameraProvider.unbindAll()
+        cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, analyzer)
     }
 }
 
-@OptIn(androidx.camera.core.ExperimentalGetImage::class)
-@Composable
-fun CameraPreviewWithBarcodeScanner(
-    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
-    executor: ExecutorService,
-    onBarcodeScanned: (String) -> Unit
-) {
-    val context = LocalContext.current
-    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { ctx ->
-            val previewView = androidx.camera.view.PreviewView(ctx)
-            cameraProviderFuture.addListener(
-                {
-                    try {
-                        val cameraProvider = cameraProviderFuture.get()
-                        val preview = Preview.Builder().build().also {
-                            it.setSurfaceProvider(previewView.surfaceProvider)
-                        }
-                        val imageAnalysis = ImageAnalysis.Builder()
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build()
-                        val barcodeScanner: BarcodeScanner = BarcodeScanning.getClient()
-                        imageAnalysis.setAnalyzer(executor) { imageProxy ->
-                            processBarcodeImage(imageProxy, barcodeScanner, onBarcodeScanned)
-                        }
-                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-                        cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
-                    } catch (e: Exception) {
-                        Log.e("CameraPreview", "Error setting up camera", e)
-                    }
-                },
-                ContextCompat.getMainExecutor(ctx)
-            )
-            previewView
-        }
-    )
-}
-
-@OptIn(androidx.camera.core.ExperimentalGetImage::class)
-fun processBarcodeImage(
+// معالجة صورة الكاميرا
+private fun processImageProxy(
     imageProxy: ImageProxy,
-    barcodeScanner: BarcodeScanner,
-    onBarcodeScanned: (String) -> Unit
+    onBarcodeDetected: (String) -> Unit
 ) {
-    try {
-        val mediaImage = imageProxy.image
-        if (mediaImage == null) {
-            Log.e("BarcodeError", "mediaImage is null. Skipping frame.")
-            imageProxy.close()
-            return
-        }
+    val mediaImage = imageProxy.image
+    if (mediaImage != null) {
         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        barcodeScanner.process(image)
+        val scanner = BarcodeScanning.getClient()
+
+        scanner.process(image)
             .addOnSuccessListener { barcodes ->
-                for (barcode in barcodes) {
-                    barcode.rawValue?.let { scannedValue ->
-                        Log.d("BarcodeScanner", "Scanned: $scannedValue")
-                        onBarcodeScanned(scannedValue)
-                    }
+                val firstBarcode = barcodes.firstOrNull { it.rawValue != null }
+                firstBarcode?.rawValue?.let { value ->
+                    onBarcodeDetected(value)
                 }
             }
-            .addOnFailureListener { exception ->
-                Log.e("BarcodeError", "Error processing barcode", exception)
+            .addOnFailureListener {
+                // خطأ بالمسح
             }
             .addOnCompleteListener {
                 imageProxy.close()
             }
-    } catch (e: Exception) {
-        Log.e("BarcodeError", "Exception in processBarcodeImage", e)
+    } else {
         imageProxy.close()
     }
 }

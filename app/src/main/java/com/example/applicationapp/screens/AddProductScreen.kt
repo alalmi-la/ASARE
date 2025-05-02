@@ -1,5 +1,6 @@
-package com.example.applicationapp.screens
+package com.example.applicationapp.screens.product
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -7,35 +8,247 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.cloudinary.android.MediaManager
 import com.cloudinary.android.callback.ErrorInfo
 import com.cloudinary.android.callback.UploadCallback
-import com.example.applicationapp.ui.theme.AccentColor
+import com.example.applicationapp.ui.theme.OnPrimaryColor
+import com.example.applicationapp.ui.theme.PrimaryColor
 import com.example.applicationapp.viewmodel.ProductViewModel
-import com.example.asare_montagrt.data.model.Product
+import com.google.firebase.firestore.GeoPoint
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
-import androidx.compose.ui.Modifier
+import java.util.*
 
-// دالة تحويل الـ URI إلى ملف مؤقت
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddProductScreen(
+    navController: NavController,
+    viewModel: ProductViewModel,
+    initialBarcode: String? = null,
+    initialName: String? = null,
+    initialImageUrl: String? = null,
+    initialStoreName: String? = null,
+    productId: String? = null,
+    isUpdateMode: Boolean = false
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var barcode by remember { mutableStateOf(initialBarcode ?: "") }
+    var name by remember { mutableStateOf(initialName ?: "") }
+    var price by remember { mutableStateOf("") }
+    var storeName by remember { mutableStateOf(initialStoreName ?: "") }
+    var storeLocation by remember { mutableStateOf<GeoPoint?>(null) }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+    var imageUrl by remember { mutableStateOf(initialImageUrl) }
+
+    val pickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        imageUri = uri
+    }
+
+    val cameraCaptureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
+        bitmap?.let {
+            val tempFile = getFileFromBitmap(context, it)
+            if (tempFile != null) {
+                imageUri = Uri.fromFile(tempFile)
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("إضافة منتج", color = OnPrimaryColor) },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = OnPrimaryColor)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryColor)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(200.dp)
+                    .background(Color.LightGray, RoundedCornerShape(16.dp))
+                    .clickable {
+                        cameraCaptureLauncher.launch(null)
+                    }
+                    .align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center
+            ) {
+                if (imageUri != null) {
+                    Image(
+                        painter = rememberAsyncImagePainter(imageUri),
+                        contentDescription = "صورة المنتج",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (imageUrl != null) {
+                    Image(
+                        painter = rememberAsyncImagePainter(imageUrl),
+                        contentDescription = "صورة موجودة",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = "رفع صورة", modifier = Modifier.size(48.dp))
+                        Text("اضغط لالتقاط صورة", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("اسم المنتج") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = initialName.isNullOrBlank()
+            )
+            OutlinedTextField(
+                value = price,
+                onValueChange = { price = it },
+                label = { Text("السعر") },
+                keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = storeName,
+                onValueChange = { storeName = it },
+                label = { Text("اسم المتجر") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(onClick = {
+                        navController.navigate("store_map?readonly=false")
+                    }) {
+                        Icon(Icons.Default.Map, contentDescription = "اختيار الموقع")
+                    }
+                }
+            )
+
+            OutlinedTextField(
+                value = barcode,
+                onValueChange = { barcode = it },
+                label = { Text("الباركود") },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = initialBarcode.isNullOrBlank()
+            )
+
+            storeLocation?.let {
+                Text("📍 الموقع المختار: ${it.latitude}, ${it.longitude}", style = MaterialTheme.typography.bodySmall)
+            }
+
+            Button(
+                onClick = {
+                    if (name.isNotBlank() && price.isNotBlank() && storeName.isNotBlank() && barcode.isNotBlank()) {
+                        uploading = true
+                        val uploadNewImage = imageUri != null
+                        if (uploadNewImage) {
+                            val file = getFileFromUri(context, imageUri!!)
+                            if (file != null) {
+                                MediaManager.get().upload(file.absolutePath)
+                                    .option("resource_type", "image")
+                                    .callback(object : UploadCallback {
+                                        override fun onStart(requestId: String?) {}
+                                        override fun onProgress(requestId: String?, bytes: Long, totalBytes: Long) {}
+                                        override fun onSuccess(requestId: String?, resultData: Map<*, *>?) {
+                                            val secureUrl = resultData?.get("secure_url") as? String ?: ""
+                                            saveProduct(name, price, storeName, storeLocation, barcode, secureUrl, viewModel, context, navController)
+                                            uploading = false
+                                        }
+                                        override fun onError(requestId: String?, error: ErrorInfo?) {
+                                            uploading = false
+                                            Toast.makeText(context, "خطأ في رفع الصورة", Toast.LENGTH_SHORT).show()
+                                        }
+                                        override fun onReschedule(requestId: String?, error: ErrorInfo?) {}
+                                    })
+                                    .dispatch()
+                            }
+                        } else if (imageUrl != null) {
+                            saveProduct(name, price, storeName, storeLocation, barcode, imageUrl!!, viewModel, context, navController)
+                            uploading = false
+                        } else {
+                            Toast.makeText(context, "يرجى اختيار صورة", Toast.LENGTH_SHORT).show()
+                            uploading = false
+                        }
+                    } else {
+                        Toast.makeText(context, "يرجى ملء كل الحقول", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                enabled = !uploading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (uploading) "جارٍ الحفظ..." else "حفظ المنتج")
+            }
+        }
+    }
+}
+
+private fun saveProduct(
+    name: String,
+    price: String,
+    storeName: String,
+    storeLocation: GeoPoint?,
+    barcode: String,
+    imageUrl: String,
+    viewModel: ProductViewModel,
+    context: Context,
+    navController: NavController
+) {
+    val newProduct = com.example.asare_montagrt.data.model.Product(
+        id = UUID.randomUUID().toString(),
+        name = name,
+        price = price.toDoubleOrNull() ?: 0.0,
+        storeName = storeName,
+        storeLocation = storeLocation,
+        barcode = barcode,
+        imageUrl = imageUrl
+    )
+    viewModel.addProductFromUI(
+        name = newProduct.name,
+        price = newProduct.price,
+        storeName = newProduct.storeName,
+        barcode = newProduct.barcode,
+        imageUrl = newProduct.imageUrl
+    )
+    Toast.makeText(context, "تمت إضافة المنتج بنجاح", Toast.LENGTH_SHORT).show()
+    navController.popBackStack()
+}
+
 fun getFileFromUri(context: Context, uri: Uri): File? {
     return try {
         val inputStream = context.contentResolver.openInputStream(uri) ?: return null
         val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
-        FileOutputStream(tempFile).use { output ->
-            inputStream.copyTo(output)
-        }
+        FileOutputStream(tempFile).use { output -> inputStream.copyTo(output) }
         tempFile
     } catch (e: Exception) {
         e.printStackTrace()
@@ -43,7 +256,6 @@ fun getFileFromUri(context: Context, uri: Uri): File? {
     }
 }
 
-// دالة تحويل Bitmap إلى ملف
 fun getFileFromBitmap(context: Context, bitmap: Bitmap): File? {
     return try {
         val tempFile = File.createTempFile("temp_image", ".jpg", context.cacheDir)
@@ -55,241 +267,5 @@ fun getFileFromBitmap(context: Context, bitmap: Bitmap): File? {
     } catch (e: Exception) {
         e.printStackTrace()
         null
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AddProductScreen(
-    navController: NavController,
-    viewModel: ProductViewModel,
-    productId: String?,
-    isUpdateMode: Boolean = false,
-    initialBarcode: String? = null,
-    initialStoreName: String? = null,
-    initialStoreLocation: String? = null
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    var barcode by remember { mutableStateOf(initialBarcode ?: "") }
-    var name by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
-    var storeName by remember { mutableStateOf(initialStoreName ?: "") }
-    var storeLocation by remember { mutableStateOf(initialStoreLocation ?: "") }
-    var imageUri by remember { mutableStateOf<Uri?>(null) }
-    var isSaving by remember { mutableStateOf(false) }
-
-    // إذا كان وضع التحديث، نملأ الحقول بالبيانات الحالية
-    if (isUpdateMode && productId != null) {
-        val products by viewModel.productList.collectAsState(initial = emptyList())
-        val existingProduct = products.find { it.id == productId }
-        existingProduct?.let { prod ->
-            name = prod.name
-            price = prod.price.toString()
-            storeName = prod.storeName
-            storeLocation = prod.storeLocation
-            barcode = prod.barcode
-        }
-    }
-
-    // لانشر اختيار الصورة من المعرض
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        imageUri = uri
-    }
-
-    // لانشر التقاط صورة مباشرةً من الكاميرا
-    val cameraCaptureLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap: Bitmap? ->
-        bitmap?.let {
-            val file = getFileFromBitmap(context, it)
-            if (file != null) {
-                imageUri = Uri.fromFile(file)
-            }
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (isUpdateMode) "تحديث المنتج" else "إضافة منتج جديد", color = MaterialTheme.colorScheme.onPrimary) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primary)
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize() // تأكد من استيراد androidx.compose.foundation.layout.fillMaxSize
-                .padding(innerPadding)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            OutlinedTextField(
-                value = barcode,
-                onValueChange = { /* لا يسمح بالتعديل على الباركود */ },
-                label = { Text("الباركود") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                enabled = false
-            )
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("اسم المنتج") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                enabled = !isUpdateMode
-            )
-            OutlinedTextField(
-                value = price,
-                onValueChange = { price = it },
-                label = { Text("السعر") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            )
-            OutlinedTextField(
-                value = storeName,
-                onValueChange = { storeName = it },
-                label = { Text("اسم المتجر") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                enabled = !isUpdateMode
-            )
-            OutlinedTextField(
-                value = storeLocation,
-                onValueChange = { storeLocation = it },
-                label = { Text("موقع المتجر") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                enabled = !isUpdateMode
-            )
-
-            imageUri?.let {
-                Image(
-                    painter = rememberAsyncImagePainter(it),
-                    contentDescription = "صورة المنتج",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(150.dp) // تأكد من استيراد androidx.compose.foundation.layout.size
-                        .padding(8.dp)
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Button(
-                    onClick = { galleryLauncher.launch("image/*") },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("اختر من المعرض", color = MaterialTheme.colorScheme.onPrimary)
-                }
-                Button(
-                    onClick = { cameraCaptureLauncher.launch(null) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                ) {
-                    Text("التقط صورة", color = MaterialTheme.colorScheme.onSecondary)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp)) // تأكد من استيراد androidx.compose.foundation.layout.height
-
-            Button(
-                onClick = {
-                    isSaving = true
-                    if (imageUri != null) {
-                        val file = getFileFromUri(context, imageUri!!)
-                        if (file != null) {
-                            MediaManager.get().upload(file.absolutePath)
-                                .option("resource_type", "image")
-                                .callback(object : UploadCallback {
-                                    override fun onStart(requestId: String?) {}
-                                    override fun onProgress(requestId: String?, bytes: Long, totalBytes: Long) {}
-                                    override fun onSuccess(requestId: String?, resultData: Map<*, *>?) {
-                                        val secureUrl = resultData?.get("secure_url") as? String ?: ""
-                                        val newProduct = Product(
-                                            id = productId ?: "",
-                                            name = name,
-                                            price = price.toDoubleOrNull() ?: 0.0,
-                                            storeName = storeName,
-                                            storeLocation = storeLocation,
-                                            barcode = barcode,
-                                            imageUrl = secureUrl
-                                        )
-                                        scope.launch {
-                                            if (isUpdateMode) {
-                                                viewModel.updateProduct(newProduct)
-                                            } else {
-                                                viewModel.addProduct(newProduct)
-                                            }
-                                            Toast.makeText(
-                                                context,
-                                                if (isUpdateMode) "تم تحديث المنتج بنجاح!" else "تمت إضافة المنتج بنجاح!",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            isSaving = false
-                                            navController.popBackStack()
-                                        }
-                                    }
-                                    override fun onError(requestId: String?, error: ErrorInfo?) {
-                                        Toast.makeText(context, "فشل رفع الصورة: ${error?.description}", Toast.LENGTH_SHORT).show()
-                                        isSaving = false
-                                    }
-                                    override fun onReschedule(requestId: String?, error: ErrorInfo?) {}
-                                })
-                                .dispatch()
-                        } else {
-                            Toast.makeText(context, "فشل تحويل الصورة إلى ملف!", Toast.LENGTH_SHORT).show()
-                            isSaving = false
-                        }
-                    } else {
-                        val newProduct = Product(
-                            id = productId ?: "",
-                            name = name,
-                            price = price.toDoubleOrNull() ?: 0.0,
-                            storeName = storeName,
-                            storeLocation = storeLocation,
-                            barcode = barcode,
-                            imageUrl = ""
-                        )
-                        scope.launch {
-                            if (isUpdateMode) {
-                                viewModel.updateProduct(newProduct)
-                            } else {
-                                viewModel.addProduct(newProduct)
-                            }
-                            Toast.makeText(
-                                context,
-                                if (isUpdateMode) "تم تحديث المنتج بنجاح!" else "تمت إضافة المنتج بنجاح!",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            isSaving = false
-                            navController.popBackStack()
-                        }
-                    }
-                },
-                enabled = !isSaving,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
-            ) {
-                Text(
-                    if (isSaving) "جارٍ الحفظ..."
-                    else if (isUpdateMode) "تحديث المنتج"
-                    else "حفظ المنتج",
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
-        }
     }
 }

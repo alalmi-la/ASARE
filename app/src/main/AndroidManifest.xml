@@ -1,33 +1,39 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.applicationapp">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- إضافة عنصر queries في المستوى العلوي -->
+    <!-- الأذونات المطلوبة -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+    <!-- دعم الكاميرا -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <!-- السماح بفتح الكاميرا عبر Intents -->
     <queries>
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
     </queries>
 
-    <!-- إذن الوصول إلى الإنترنت (مهم لـ Firebase) -->
-    <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- إذن استخدام الكاميرا -->
-    <uses-permission android:name="android.permission.CAMERA" />
-
-    <!-- إذن قراءة التخزين الخارجي (ضروري لتحويل URI إلى ملف) -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-
-    <!-- تحديد أن الكاميرا ليست مطلوبة لجميع الأجهزة -->
-    <uses-feature
-        android:name="android.hardware.camera"
-        android:required="false" />
-
     <application
         android:name=".MyApplication"
         android:allowBackup="true"
-        android:theme="@style/Theme.ApplicationAPP">
+        android:theme="@style/Theme.ApplicationAPP"
+        android:usesCleartextTraffic="true">
 
-        <!-- تعطيل Firebase Analytics مؤقتًا -->
+
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCEwUkV8dKYIAr_0LJJDOAzXtSyoCiSPZE" />
+
+
+
+
+        <!-- Firebase إعدادات -->
         <meta-data
             android:name="firebase_analytics_collection_deactivated"
             android:value="true" />
@@ -35,6 +41,7 @@
             android:name="firebase_analytics_collection_enabled"
             android:value="false" />
 
+        <!-- الشاشة الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -43,6 +50,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
     </application>
 
 </manifest>
+

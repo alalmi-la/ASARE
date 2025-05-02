@@ -1,3 +1,4 @@
+// settings.gradle.kts
 pluginManagement {
     repositories {
         google()
@@ -11,7 +12,20 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") } // تم إضافة مستودع JitPack هنا
+
+        // MapTiler SDK repository
+        maven { url = uri("https://api.maptiler.com/maven/") }
+
+        // MapLibre (إذا لا زلت تحتاجه)
+        maven { url = uri("https://maplibre.org/maven") }
+
+        // JitPack
+        maven { url = uri("https://jitpack.io") }
+
+        // لقراءة ملفات .aar من libs/
+        flatDir {
+            dirs("libs")
+        }
     }
 }
 
