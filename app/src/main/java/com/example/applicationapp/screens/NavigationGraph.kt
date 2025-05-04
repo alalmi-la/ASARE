@@ -1,190 +1,165 @@
-package com.example.applicationapp.navigation
+package com.example.applicationapp.screens
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavHostController
 import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.navArgument
-import com.example.applicationapp.model.Store
-import com.example.applicationapp.screens.*
-import com.example.applicationapp.screens.LoginScreen
-import com.example.applicationapp.screens.product.AddProductScreen
+import com.example.applicationapp.screens.store.StoreMapScreen
+import com.example.applicationapp.ui.theme.AppTheme
+import com.example.applicationapp.viewmodel.BarcodeSource
 import com.example.applicationapp.viewmodel.ProductViewModel
-import com.google.firebase.firestore.GeoPoint
-import android.content.Context
 
-
-@Composable
-fun StartDestinationGraph(navController: NavHostController) {
-    val context = LocalContext.current
-    val isLoggedIn = remember {
-        context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            .getBoolean("is_logged_in", false)
-    }
-
-    NavigationGraph(
-        navController = navController,
-        startDestination = if (isLoggedIn) "home" else "login"
-    )
-}
 @Composable
 fun NavigationGraph(
     navController: NavHostController,
-    modifier: Modifier = Modifier,
-    startDestination: String
+    productViewModel: ProductViewModel
 ) {
-    val productViewModel: ProductViewModel = hiltViewModel()
+    NavHost(navController = navController, startDestination = "auth_check") {
 
+        // ✅ شاشة التحقق من الدخول
+        composable("auth_check") {
+            AuthCheckScreen(navController = navController)
+        }
 
+        // ✅ تسجيل الدخول
+        composable("login") {
+            LoginScreen(navController = navController, viewModel = productViewModel)
+        }
 
-    Box(modifier = modifier) {
-        NavHost(
-            navController = navController,
-            startDestination = startDestination
-        ) {
-            // Login Screen
-            composable("login") {
-                LoginScreen(navController = navController, viewModel = productViewModel)
+        // ✅ الصفحة الرئيسية
+        composable("home") {
+            HomeScreen(navController = navController, viewModel = productViewModel)
+        }
 
-            }
+        // ✅ قارئ الباركود مع باراميتر source
+        composable(
+            route = "barcode_scanner?source={source}",
+            arguments = listOf(
+                navArgument("source") {
+                    type = NavType.StringType
+                    defaultValue = "HOME"
+                }
+            )
+        ) { backStackEntry ->
+            // اضبط المصدر في الـ ViewModel
+            val sourceArg = backStackEntry.arguments?.getString("source") ?: "HOME"
+            productViewModel.setBarcodeSource(BarcodeSource.valueOf(sourceArg))
 
-            // Home Screen
-            composable("home") {
-                HomeScreen(navController = navController, viewModel = productViewModel)
+            BarcodeScannerScreen(
+                navController = navController,
+                viewModel = productViewModel
+            )
+        }
 
-            }
+        // ✅ شاشة التسوق الذكي
+        composable("smart_shopping") {
+            SmartShoppingScreen(navController = navController, viewModel = productViewModel)
+        }
 
-            // Price List Screen
-            composable(
-                route = "price_list/{barcodeOrName}",
-                arguments = listOf(navArgument("barcodeOrName") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val barcodeOrName = backStackEntry.arguments?.getString("barcodeOrName") ?: ""
-                PriceListScreen(
-                    navController = navController,
-                    barcode = barcodeOrName,
-                    viewModel = productViewModel
-                )
-            }
+        // ✅ إضافة متجر
+        composable("add_store") {
+            AddStoreScreen(navController = navController, viewModel = productViewModel)
+        }
 
-            // Product Details Screen
-            composable(
-                route = "product_details/{productId}",
-                arguments = listOf(navArgument("productId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val productId = backStackEntry.arguments?.getString("productId") ?: ""
-                ProductDetailsScreen(
-                    navController = navController,
-                    viewModel = productViewModel,
-                    productId = productId
-                )
-            }
+        // ✅ شاشة قائمة الأسعار حسب الباركود
+        composable("price_list/{barcode}") { backStackEntry ->
+            val barcode = backStackEntry.arguments?.getString("barcode").orEmpty()
+            PriceListScreen(
+                navController = navController,
+                viewModel = productViewModel,
+                barcode = barcode
+            )
+        }
 
-            // Add Product Screen
-            composable(
-                route = "add_product?barcode={barcode}&storeName={storeName}&name={name}&imageUrl={imageUrl}",
-                arguments = listOf(
-                    navArgument("barcode") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("storeName") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("name") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("imageUrl") { type = NavType.StringType; defaultValue = "" }
-                )
-            ) { backStackEntry ->
-                val barcode = backStackEntry.arguments?.getString("barcode") ?: ""
-                val storeName = backStackEntry.arguments?.getString("storeName") ?: ""
-                val name = backStackEntry.arguments?.getString("name") ?: ""
-                val imageUrl = backStackEntry.arguments?.getString("imageUrl") ?: ""
+        // ✅ تفاصيل المنتج باستخدام معرف المنتج
+        composable("product_details/{productId}") { backStackEntry ->
+            val productId = backStackEntry.arguments?.getString("productId").orEmpty()
+            ProductDetailsScreen(
+                navController = navController,
+                viewModel = productViewModel,
+                productId = productId
+            )
+        }
 
+        // ✅ تفاصيل المنتج باستخدام الباركود (عند عدم وجود معرف)
+        composable(
+            route = "product_details?barcode={barcode}",
+            arguments = listOf(
+                navArgument("barcode") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val barcode = backStackEntry.arguments?.getString("barcode").orEmpty()
+            ProductDetailsScreen(
+                navController = navController,
+                viewModel = productViewModel,
+                scannedBarcode = barcode
+            )
+        }
+
+        // ✅ شاشة إضافة / تعديل منتج (تفاصيل مملوءة)
+        composable(
+            route = "add_product_screen?" +
+                    "name={name}&barcode={barcode}&imageUrl={imageUrl}" +
+                    "&storeName={storeName}&lat={lat}&lng={lng}" +
+                    "&productId={productId}&isUpdateMode={isUpdateMode}",
+            arguments = listOf(
+                navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                navArgument("barcode") { type = NavType.StringType; defaultValue = "" },
+                navArgument("imageUrl") { type = NavType.StringType; defaultValue = "" },
+                navArgument("storeName") { type = NavType.StringType; defaultValue = "" },
+                navArgument("lat") { type = NavType.FloatType; defaultValue = 0f },
+                navArgument("lng") { type = NavType.FloatType; defaultValue = 0f },
+                navArgument("productId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("isUpdateMode") { type = NavType.BoolType; defaultValue = false },
+            )
+        ) { backStackEntry ->
+            val name = backStackEntry.arguments?.getString("name").orEmpty()
+            val barcode = backStackEntry.arguments?.getString("barcode").orEmpty()
+            val imageUrl = backStackEntry.arguments?.getString("imageUrl").orEmpty()
+            val storeName = backStackEntry.arguments?.getString("storeName").orEmpty()
+            val lat = backStackEntry.arguments?.getFloat("lat") ?: 0f
+            val lng = backStackEntry.arguments?.getFloat("lng") ?: 0f
+            val productId = backStackEntry.arguments?.getString("productId").orEmpty()
+            val isUpdateMode = backStackEntry.arguments?.getBoolean("isUpdateMode") ?: false
+
+            AppTheme {
                 AddProductScreen(
                     navController = navController,
                     viewModel = productViewModel,
-                    initialBarcode = barcode,
+                    prefillName = name,
+                    prefillBarcode = barcode,
+                    prefillImageUrl = imageUrl,
                     initialStoreName = storeName,
-                    initialName = name,
-                    initialImageUrl = imageUrl
+                    initialLocation = if (lat != 0f || lng != 0f) Pair(lat, lng) else null,
+                    productId = productId,
+                    isUpdateMode = isUpdateMode
                 )
             }
+        }
 
-            // Barcode Scanner Screen
-            composable(
-                route = "barcode?fromShopping={fromShopping}",
-                arguments = listOf(
-                    navArgument("fromShopping") { type = NavType.BoolType; defaultValue = false }
-                )
-            ) { backStackEntry ->
-                val fromShopping = backStackEntry.arguments?.getBoolean("fromShopping") ?: false
-                BarcodeScannerScreen(
-                    navController = navController,
-                    viewModel = productViewModel,
-                    fromShopping = fromShopping
-                )
-            }
-
-            // Add Store Screen
-            composable("add_store") {
-                AddStoreScreen(
-                    navController = navController,
-                    viewModel = productViewModel
-                )
-            }
-
-            // Store Map Screen ✅ إصلاح تمرير viewModel
-            composable(
-                route = "store_map?readonly={readonly}&destinationLat={destinationLat}&destinationLng={destinationLng}",
-                arguments = listOf(
-                    navArgument("readonly") { type = NavType.BoolType; defaultValue = false },
-                    navArgument("destinationLat") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("destinationLng") { type = NavType.StringType; defaultValue = "" }
-                )
-            ) { backStackEntry ->
-                val readonly = backStackEntry.arguments?.getBoolean("readonly") ?: false
-                val lat = backStackEntry.arguments?.getString("destinationLat")?.toDoubleOrNull()
-                val lng = backStackEntry.arguments?.getString("destinationLng")?.toDoubleOrNull()
-                val destination = if (lat != null && lng != null) GeoPoint(lat, lng) else null
-
-                StoreMapScreen(
-                    navController = navController,
-                    fromDetails = readonly,
-                    targetStore = destination?.let {
-                        Store(
-                            name = "المتجر",
-                            latitude = it.latitude,
-                            longitude = it.longitude
-                        )
-                    },
-                    viewModel = productViewModel  // ✅ تم إضافة viewModel هنا
-                )
-            }
-
-            // Settings Screen
-
-            // Update Product Screen
-            composable(
-                route = "update_product/{productId}",
-                arguments = listOf(navArgument("productId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val productId = backStackEntry.arguments?.getString("productId") ?: ""
+        // ✅ شاشة إضافة منتج فارغة
+        composable("add_product") {
+            AppTheme {
                 AddProductScreen(
                     navController = navController,
-                    viewModel = productViewModel,
-                    productId = productId,
-                    isUpdateMode = true
-                )
-            }
-
-            // Smart Shopping Screen
-            composable("shopping") {
-                SmartShoppingScreen(
-                    navController = navController,
                     viewModel = productViewModel
                 )
             }
+        }
+
+        // ✅ خريطة المتاجر
+        composable("store_map") {
+            StoreMapScreen(navController = navController, viewModel = productViewModel)
+        }
+
+        // ✅ اختيار موقع من الخريطة
+        composable("store_map_select") {
+            StoreMapScreen(navController = navController, viewModel = productViewModel)
         }
     }
 }

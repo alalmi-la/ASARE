@@ -91,6 +91,8 @@ dependencies {
     implementation("androidx.compose.runtime:runtime")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.6.2")
     implementation("androidx.compose.runtime:runtime-livedata")
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.33.2-alpha")
+
     // مكتبات Vico
     implementation("com.patrykandpatrick.vico:compose-m3:1.13.0")
     implementation("com.patrykandpatrick.vico:core:1.13.0")

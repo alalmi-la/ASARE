@@ -29,10 +29,22 @@ enum class SortType(val displayName: String) {
     NEARBY("الأقرب إليك")
 }
 
+// مصدر استدعاء شاشة الباركود
+enum class BarcodeSource {
+    ADD_PRODUCT,
+    SMART_SHOPPING,
+    PRICE_LIST,
+    HOME
+}
+
 @HiltViewModel
 class ProductViewModel @Inject constructor(
     private val productRepository: ProductRepository
 ) : ViewModel() {
+    // ✅ حالة لتخزين المنتج المراد تعديله مؤقتاً
+    private val _editingProduct = MutableStateFlow<Product?>(null)
+    val editingProduct: StateFlow<Product?> = _editingProduct
+
 
     private val _productList = MutableStateFlow<List<Product>>(emptyList())
     val productList: StateFlow<List<Product>> = _productList
@@ -65,10 +77,22 @@ class ProductViewModel @Inject constructor(
     private var currentProductLimit = 50L
     private var userLocation: Location? = null
 
+    // ✅ حالة جديدة: مصدر استدعاء شاشة الباركود
+    private val _barcodeSource = MutableStateFlow<BarcodeSource?>(null)
+    val barcodeSource: StateFlow<BarcodeSource?> = _barcodeSource
+
+    // ✅ حالة جديدة: الباركود الممسوح مؤقتًا
+    private val _scannedBarcode = MutableStateFlow<String?>(null)
+    val scannedBarcode: StateFlow<String?> = _scannedBarcode
+
     init {
         loadProducts()
         loadStores()
     }
+    suspend fun getProductById(id: String): Product? {
+        return productRepository.getProductById(id)
+    }
+
 
     fun setUser(user: User) {
         _currentUser.value = user
@@ -78,6 +102,10 @@ class ProductViewModel @Inject constructor(
         FirebaseAuth.getInstance().signOut()
         _currentUser.value = null
         onLoggedOut()
+    }
+
+    fun isLoggedIn(): Boolean {
+        return _currentUser.value != null
     }
 
     fun getProductsByName(name: String): List<Product> =
@@ -93,20 +121,6 @@ class ProductViewModel @Inject constructor(
         }
     }
 
-    fun loadProducts(limit: Long = currentProductLimit) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            productRepository.getProductsFlow(limit).collectLatest { products ->
-                _productList.value = products
-                _isLoading.value = false
-            }
-        }
-    }
-
-    fun loadMoreProducts() {
-        currentProductLimit += 50
-        loadProducts(currentProductLimit)
-    }
 
     fun loadStores() {
         viewModelScope.launch {
@@ -236,6 +250,9 @@ class ProductViewModel @Inject constructor(
         _selectedProducts.value = currentList
     }
 
+
+
+
     fun updateProduct(product: Product) {
         viewModelScope.launch {
             productRepository.updateProduct(product)
@@ -265,19 +282,15 @@ class ProductViewModel @Inject constructor(
         }
     }
 
-    fun submitPriceRating(
+    suspend fun submitPriceRating(
         barcode: String,
         storeName: String,
-        rating: Float,
-        onResult: (Boolean) -> Unit
-    ) {
-        viewModelScope.launch {
-            val userId = _currentUser.value?.id ?: return@launch
-            val success = productRepository
-                .submitPriceRating(barcode, storeName, userId, rating.toInt())
-            onResult(success)
-        }
+        rating: Float
+    ): Boolean {
+        val userId = _currentUser.value?.id ?: return false
+        return productRepository.submitPriceRating(barcode, storeName, userId, rating.toInt())
     }
+
 
     suspend fun getAverageRating(barcode: String, storeName: String): Float =
         productRepository.getAveragePriceRating(barcode, storeName).toFloat()
@@ -295,4 +308,78 @@ class ProductViewModel @Inject constructor(
         storeName: String
     ): List<Pair<Long, Double>> =
         productRepository.getPriceHistory(barcode, storeName)
+
+    // ✅ دوال مساعدة جديدة
+    fun setBarcodeSource(source: BarcodeSource) {
+        _barcodeSource.value = source
+    }
+
+    fun setScannedBarcode(barcode: String) {
+        _scannedBarcode.value = barcode
+    }
+
+    fun clearScannedBarcode() {
+        _scannedBarcode.value = null
+    }
+    // لتعيين المنتج الذي سيتم تعديله
+    fun setEditingProduct(product: Product) {
+        _editingProduct.value = product
+    }
+
+    // لمسح المنتج بعد الانتهاء من التعديل
+    fun clearEditingProduct() {
+        _editingProduct.value = null
+    }
+    // ... الكود كما هو في الأعلى دون تغيير ...
+
+    fun loadProducts(limit: Long = currentProductLimit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            productRepository.getProductsFlow(limit).collectLatest { products ->
+                _productList.value = products
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun refreshProducts() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            currentProductLimit = 50L
+            productRepository.getProductsFlow(currentProductLimit).collectLatest { products ->
+                _productList.value = products
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun loadMoreProducts() {
+        currentProductLimit += 50
+        loadProducts(currentProductLimit)
+    }
+    // ✅ دوال خاصة بالهوم لعرض المنتجات المميزة
+
+    fun getHomeTopRatedProducts(): List<Product> {
+        return _productList.value.sortedByDescending { it.rating }
+    }
+
+    fun getHomeFeaturedProducts(): List<Product> {
+        return _productList.value.sortedByDescending { it.updatedAt }
+    }
+
+    fun getHomeNearbyProducts(): List<Product> {
+        return userLocation?.let { loc ->
+            _productList.value.sortedBy { product ->
+                product.storeLocation?.let { geo ->
+                    val storeLoc = Location("store").apply {
+                        latitude = geo.latitude
+                        longitude = geo.longitude
+                    }
+                    loc.distanceTo(storeLoc).toDouble()
+                } ?: Double.MAX_VALUE
+            }
+        } ?: _productList.value
+    }
+
+
 }
