@@ -34,8 +34,28 @@ class ProductRepository @Inject constructor(
     // ────────────────────────────────────
 
     /** إضافة منتج جديد وتسجيل السعر في سجل الأسعار */
-    suspend fun addProduct(product: Product) {
-        productsCollection.add(product).await()
+    /**
+     * يضيف أو يحدث المنتج نفسه (barcode + store) ثم يسجل التاريخ.
+     * @return true إذا أُضيف جديد، false إذا حدّثنا موجود.
+     */
+    suspend fun addOrUpdateProduct(product: Product): Boolean {
+        val existing = getProductByBarcodeAndStore(
+            product.barcode, product.storeName, product.storeLocation!!
+        )
+        return if (existing == null) {
+            productsCollection.add(product).await()
+            recordPriceHistory(product)
+            true
+        } else {
+            productsCollection.document(existing.id)
+                .update("price", product.price, "updatedAt", System.currentTimeMillis())
+                .await()
+            recordPriceHistory(product)
+            false
+        }
+    }
+
+    private suspend fun recordPriceHistory(product: Product) {
         priceHistoryCollection.add(
             mapOf(
                 "barcode"   to product.barcode,
@@ -45,6 +65,7 @@ class ProductRepository @Inject constructor(
             )
         ).await()
     }
+
 
     /** تحديث بيانات منتج موجود */
     suspend fun updateProduct(product: Product) {
@@ -180,9 +201,11 @@ class ProductRepository @Inject constructor(
             .whereEqualTo("storeName", storeName)
             .get()
             .await()
-        val ratings = snapshot.documents.mapNotNull { it.getLong("rating")?.toInt() }
+
+        val ratings = snapshot.documents.mapNotNull { it.getDouble("rating") }
         return if (ratings.isNotEmpty()) ratings.average() else 0.0
     }
+
 
     /** تقييم المستخدم الخاص */
     suspend fun getUserPriceRating(barcode: String, storeName: String, userId: String): Int? {

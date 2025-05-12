@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -38,6 +39,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 
+@androidx.annotation.OptIn(ExperimentalGetImage::class)
 @OptIn(ExperimentalGetImage::class)
 private fun processImageProxy(
     imageProxy: ImageProxy,
@@ -59,7 +61,7 @@ private fun processImageProxy(
 @OptIn(
     ExperimentalGetImage::class,
     ExperimentalPermissionsApi::class,
-    ExperimentalMaterial3Api::class // ← أضف هذا السطر
+    ExperimentalMaterial3Api::class
 )
 @Composable
 fun BarcodeScannerScreen(
@@ -67,7 +69,7 @@ fun BarcodeScannerScreen(
     viewModel: ProductViewModel
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = context as LifecycleOwner
+    val lifecycleOwner = LocalLifecycleOwner.current
     val permissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val previewView = remember { PreviewView(context) }
@@ -75,12 +77,19 @@ fun BarcodeScannerScreen(
     val scannedBarcode by viewModel.scannedBarcode.collectAsState()
     val barcodeSource by viewModel.barcodeSource.collectAsState()
 
-    // طلب صلاحية الكاميرا عند بدء الشاشة
+    // ✅ اطلب صلاحية الكاميرا
     LaunchedEffect(Unit) {
         permissionState.launchPermissionRequest()
     }
 
-    // التعامل مع الباركود بعد اكتشافه
+    // ✅ تنظيف الباركود عند الخروج من الشاشة لأي سبب
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.clearScannedBarcode()
+        }
+    }
+
+    // ✅ معالجة نتيجة المسح
     LaunchedEffect(scannedBarcode) {
         val code = scannedBarcode ?: return@LaunchedEffect
         val products = viewModel.getProductsByBarcodeNow(code)
@@ -91,11 +100,24 @@ fun BarcodeScannerScreen(
                 navController.popBackStack()
             }
             BarcodeSource.ADD_PRODUCT -> {
-                navController.previousBackStackEntry
-                    ?.savedStateHandle
-                    ?.set("scanned_barcode", code)
-                navController.popBackStack()
+                val previous = navController.previousBackStackEntry
+                if (previous != null) {
+                    previous.savedStateHandle.remove<String>("scanned_barcode")
+                    previous.savedStateHandle.set("scanned_barcode", code)
+                    navController.popBackStack()
+                } else {
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("scanned_barcode", code)
+
+                    navController.navigate("add_product") {
+                        popUpTo("barcode_scanner") { inclusive = true }
+                    }
+                }
             }
+
+
+
             BarcodeSource.HOME, BarcodeSource.PRICE_LIST, null -> {
                 if (products.isNotEmpty()) {
                     viewModel.setScannedBarcode(code)
@@ -108,9 +130,12 @@ fun BarcodeScannerScreen(
                 }
             }
         }
+
+        // ✅ تأكد أن يتم تنظيف الباركود بعد التنقل
         viewModel.clearScannedBarcode()
     }
 
+    // ✅ واجهة المستخدم
     PricesTheme {
         Scaffold(
             topBar = {
@@ -150,7 +175,7 @@ fun BarcodeScannerScreen(
         }
     }
 
-    // تشغيل التحليل
+    // ✅ تشغيل الكاميرا وتحليل الصورة
     LaunchedEffect(permissionState.status.isGranted) {
         if (!permissionState.status.isGranted) return@LaunchedEffect
 
@@ -165,7 +190,7 @@ fun BarcodeScannerScreen(
 
         analysis.setAnalyzer(Executors.newSingleThreadExecutor()) { proxy ->
             processImageProxy(proxy) { barcodeValue ->
-                if (viewModel.scannedBarcode.value.isNullOrBlank()) {
+                if (viewModel.scannedBarcode.value != barcodeValue) {
                     viewModel.setScannedBarcode(barcodeValue)
                 }
             }

@@ -37,7 +37,7 @@ fun SmartShoppingScreen(
         it.name.contains(searchQuery, ignoreCase = true)
     }
 
-    PricesTheme {
+    AppTheme {
         Scaffold(
             topBar = {
                 TopAppBar(

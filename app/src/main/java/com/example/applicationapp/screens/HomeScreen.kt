@@ -156,7 +156,7 @@ fun HomeScreen(
             bottomBar = { BottomNavigationBar(navController) },
             floatingActionButton = {
                 ExtendedFloatingActionButton(
-                    onClick = { navController.navigate("add_product") },
+                    onClick = { navController.navigate("add_product_screen") },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text("إضافة منتج") },
                     containerColor = MaterialTheme.colorScheme.primary,

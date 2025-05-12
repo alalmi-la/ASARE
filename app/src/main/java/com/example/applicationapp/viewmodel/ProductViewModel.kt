@@ -1,7 +1,9 @@
+// ProductViewModel.kt
 package com.example.applicationapp.viewmodel
 
 import User
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -11,10 +13,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.applicationapp.model.Store
 import com.example.applicationapp.repository.ProductRepository
 import com.example.asare_montagrt.data.model.Product
+import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.GeoPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -103,6 +107,10 @@ class ProductViewModel @Inject constructor(
         _currentUser.value = null
         onLoggedOut()
     }
+    // رسالة حالة لنتيجة الإضافة/التحديث
+    private val _operationResult = MutableStateFlow<String?>(null)
+    val operationResult: StateFlow<String?> = _operationResult
+
 
     fun isLoggedIn(): Boolean {
         return _currentUser.value != null
@@ -203,19 +211,19 @@ class ProductViewModel @Inject constructor(
     fun getCurrentUserLocation(context: Context) {
         viewModelScope.launch {
             if (ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.ACCESS_FINE_LOCATION
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
                 ) == PackageManager.PERMISSION_GRANTED
             ) {
                 try {
-                    val client = LocationServices
-                        .getFusedLocationProviderClient(context)
-                    val location = client.lastLocation.await()
-                    userLocation = location
+                    val client: FusedLocationProviderClient =
+                        LocationServices.getFusedLocationProviderClient(context)
+                    userLocation = client.lastLocation.await()
                 } catch (_: Exception) { }
             }
         }
     }
+
+
 
     fun getUserLocation(): Location? = userLocation
 
@@ -228,7 +236,8 @@ class ProductViewModel @Inject constructor(
         price: Double,
         storeName: String,
         barcode: String,
-        imageUrl: String
+        imageUrl: String,
+        storeLocation: GeoPoint
     ) {
         val newProduct = Product(
             id = java.util.UUID.randomUUID().toString(),
@@ -236,12 +245,24 @@ class ProductViewModel @Inject constructor(
             price = price,
             storeName = storeName,
             barcode = barcode,
-            imageUrl = imageUrl
+            imageUrl = imageUrl,
+            storeLocation = storeLocation
         )
         viewModelScope.launch {
-            productRepository.addProduct(newProduct)
+            // نفّذ الإضافة أو التحديث مرة واحدة فقط
+            val created = productRepository.addOrUpdateProduct(newProduct)
+            // أعد تحميل القائمة
             loadProducts()
+            // عرض رسالة نجاح أو تحديث
+            _operationResult.value = if (created)
+                "تمت إضافة سعر جديد للمنتج في المتجر \"$storeName\"."
+            else
+                "تم تحديث السعر في المتجر \"$storeName\" بنجاح."
+            // انتظر قليلاً ثم مسح الرسالة
+            delay(2_000)
+            _operationResult.value = null
         }
+
     }
 
     fun addSelectedProduct(product: Product) {
@@ -255,10 +276,17 @@ class ProductViewModel @Inject constructor(
 
     fun updateProduct(product: Product) {
         viewModelScope.launch {
-            productRepository.updateProduct(product)
+            val created = productRepository.addOrUpdateProduct(product)
             loadProducts()
+            _operationResult.value = if (created)
+                "تمت إضافة المنتج في المتجر \"${product.storeName}\"."
+            else
+                "تم تحديث السعر في المتجر \"${product.storeName}\" بنجاح."
+            delay(2_000)
+            _operationResult.value = null
         }
     }
+
 
     fun deleteProduct(productId: String) {
         viewModelScope.launch {
@@ -288,7 +316,13 @@ class ProductViewModel @Inject constructor(
         rating: Float
     ): Boolean {
         val userId = _currentUser.value?.id ?: return false
-        return productRepository.submitPriceRating(barcode, storeName, userId, rating.toInt())
+        return try {
+            productRepository.submitPriceRating(barcode, storeName, userId, rating.toInt())
+        } catch (e: Exception) {
+            // سجل الخطأ لسهولة التتبع
+            e.printStackTrace()
+            false
+        }
     }
 
 

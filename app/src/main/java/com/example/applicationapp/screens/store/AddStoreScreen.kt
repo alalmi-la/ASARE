@@ -1,12 +1,15 @@
 package com.example.applicationapp.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,29 +29,47 @@ fun AddStoreScreen(
     viewModel: ProductViewModel
 ) {
     val context = LocalContext.current
-    var storeName by remember { mutableStateOf(TextFieldValue("")) }
+
+    var storeName by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(""))
+    }
+
     var selectedLocation by remember { mutableStateOf<GeoPoint?>(null) }
 
-    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
-    val locationFromMap = savedStateHandle
-        ?.getLiveData<GeoPoint>("selectedStoreLocation")
-        ?.observeAsState()
+    val navEntry = remember(navController) { navController.currentBackStackEntry }
+    val savedStateHandle = navEntry?.savedStateHandle
 
-    LaunchedEffect(locationFromMap?.value) {
-        locationFromMap?.value?.let {
-            selectedLocation = it
-            savedStateHandle?.remove<GeoPoint>("selectedStoreLocation")
+    val latFromMap by savedStateHandle?.getLiveData<Double>("selected_store_lat")
+        ?.observeAsState()
+        ?: remember { mutableStateOf(null) }
+
+    val lngFromMap by savedStateHandle?.getLiveData<Double>("selected_store_lng")
+        ?.observeAsState()
+        ?: remember { mutableStateOf(null) }
+
+    // ✅ الإصلاح هنا باستخدام قيم مؤقتة
+    LaunchedEffect(latFromMap, lngFromMap) {
+        val lat = latFromMap
+        val lng = lngFromMap
+        if (lat != null && lng != null) {
+            selectedLocation = GeoPoint(lat, lng)
+            savedStateHandle?.remove<Double>("selected_store_lat")
+            savedStateHandle?.remove<Double>("selected_store_lng")
         }
     }
 
-    PricesTheme {
+    AppTheme {
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = { Text("Add Store", color = PricesTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = PricesTextPrimary)
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = PricesTextPrimary
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = PricesBackgroundColor)
@@ -70,20 +91,17 @@ fun AddStoreScreen(
                 OutlinedTextField(
                     value = storeName,
                     onValueChange = { storeName = it },
-                    label = { Text("Store Name") },
-                    singleLine = true,
+                    label = { Text("اسم المتجر") },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        focusedBorderColor = PricesSelectedIconColor,
-                        unfocusedBorderColor = PricesTextSecondary
-                    )
+                    singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+
+                Spacer(Modifier.height(16.dp))
 
                 Button(
                     onClick = {
-                        navController.navigate("store_map")
+                        navController.navigate("store_map?mode=select")
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = PricesSelectedIconColor)
@@ -95,21 +113,35 @@ fun AddStoreScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
+
+                selectedLocation?.let { loc ->
+                    Text(
+                        text = "📍 Lat: ${"%.5f".format(loc.latitude)}, Lng: ${"%.5f".format(loc.longitude)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.align(Alignment.Start)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
 
                 Button(
                     onClick = {
-                        if (storeName.text.isBlank()) {
-                            Toast.makeText(context, "Please enter store name", Toast.LENGTH_SHORT).show()
-                        } else if (selectedLocation == null) {
-                            Toast.makeText(context, "Please select a location from the map", Toast.LENGTH_SHORT).show()
-                        } else {
-                            viewModel.checkAndAddStore(storeName.text.trim(), selectedLocation!!) { exists ->
-                                if (exists) {
-                                    Toast.makeText(context, "Store already exists!", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Store added successfully!", Toast.LENGTH_SHORT).show()
-                                    navController.popBackStack()
+                        when {
+                            storeName.text.isBlank() ->
+                                Toast.makeText(context, "Please enter store name", Toast.LENGTH_SHORT).show()
+                            selectedLocation == null ->
+                                Toast.makeText(context, "Please select a location from the map", Toast.LENGTH_SHORT).show()
+                            else -> {
+                                viewModel.checkAndAddStore(
+                                    storeName.text.trim(),
+                                    selectedLocation!!
+                                ) { exists ->
+                                    if (exists) {
+                                        Toast.makeText(context, "Store already exists!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Store added successfully!", Toast.LENGTH_SHORT).show()
+                                        navController.popBackStack()
+                                    }
                                 }
                             }
                         }

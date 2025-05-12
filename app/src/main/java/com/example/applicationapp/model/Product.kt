@@ -12,7 +12,6 @@ data class Product(
     val storeName: String = "",
     val storeLocation: GeoPoint? = null,
     val barcode: String = "",
-    val brand: String = "" ,// ✅ حقل جديد مضاف بأمان
     val rating: Double = 0.0 // ⭐️ التقييم من 0 إلى 5
 
 )

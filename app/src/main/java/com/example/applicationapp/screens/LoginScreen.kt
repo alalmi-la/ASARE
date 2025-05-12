@@ -96,7 +96,7 @@ fun LoginScreen(navController: NavController, viewModel: ProductViewModel = view
         }
     }
 
-    PricesTheme {
+    AppTheme {
         Scaffold(
             topBar = {
                 TopAppBar(
