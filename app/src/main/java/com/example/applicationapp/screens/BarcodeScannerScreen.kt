@@ -77,65 +77,59 @@ fun BarcodeScannerScreen(
     val scannedBarcode by viewModel.scannedBarcode.collectAsState()
     val barcodeSource by viewModel.barcodeSource.collectAsState()
 
-    // ✅ اطلب صلاحية الكاميرا
+    //  اطلب صلاحية الكاميرا
     LaunchedEffect(Unit) {
         permissionState.launchPermissionRequest()
     }
 
-    // ✅ تنظيف الباركود عند الخروج من الشاشة لأي سبب
+    //  تنظيف الباركود عند الخروج من الشاشة لأي سبب
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearScannedBarcode()
         }
     }
 
-    // ✅ معالجة نتيجة المسح
+    val isNavigated = remember { mutableStateOf(false) }
+
+
     LaunchedEffect(scannedBarcode) {
         val code = scannedBarcode ?: return@LaunchedEffect
+
+        if (isNavigated.value) return@LaunchedEffect  // ✅ لا تكرر التنقل
+        isNavigated.value = true
+
         val products = viewModel.getProductsByBarcodeNow(code)
 
         when (barcodeSource) {
             BarcodeSource.SMART_SHOPPING -> {
-                if (products.isNotEmpty()) viewModel.addSelectedProduct(products.first())
+                if (products.isNotEmpty()) {
+                    viewModel.addSelectedProduct(products.first())
+                }
                 navController.popBackStack()
             }
+
             BarcodeSource.ADD_PRODUCT -> {
-                val previous = navController.previousBackStackEntry
-                if (previous != null) {
-                    previous.savedStateHandle.remove<String>("scanned_barcode")
-                    previous.savedStateHandle.set("scanned_barcode", code)
-                    navController.popBackStack()
-                } else {
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("scanned_barcode", code)
-
-                    navController.navigate("add_product") {
-                        popUpTo("barcode_scanner") { inclusive = true }
-                    }
-                }
+                navController.popBackStack()
             }
-
-
 
             BarcodeSource.HOME, BarcodeSource.PRICE_LIST, null -> {
                 if (products.isNotEmpty()) {
-                    viewModel.setScannedBarcode(code)
                     navController.navigate("product_details?barcode=$code")
                 } else {
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("scanned_barcode", code)
-                    navController.navigate("add_product")
+                    navController.navigate("add_product") {
+                        popUpTo("add_product") { inclusive = true } // ✅ يمنع التكرار
+                    }
                 }
             }
         }
 
-        // ✅ تأكد أن يتم تنظيف الباركود بعد التنقل
-        viewModel.clearScannedBarcode()
+
     }
 
-    // ✅ واجهة المستخدم
+
+
+
+    //  واجهة المستخدم
     PricesTheme {
         Scaffold(
             topBar = {
@@ -175,7 +169,7 @@ fun BarcodeScannerScreen(
         }
     }
 
-    // ✅ تشغيل الكاميرا وتحليل الصورة
+    //  تشغيل الكاميرا وتحليل الصورة
     LaunchedEffect(permissionState.status.isGranted) {
         if (!permissionState.status.isGranted) return@LaunchedEffect
 

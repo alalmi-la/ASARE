@@ -1,5 +1,6 @@
 package com.example.applicationapp.screens
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,8 @@ import com.example.applicationapp.ui.theme.AppTheme
 import com.example.applicationapp.ui.theme.OnPrimaryColor
 import com.example.applicationapp.ui.theme.PrimaryColor
 import com.example.applicationapp.viewmodel.ProductViewModel
+import com.example.asare_montagrt.data.model.Product
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,29 +44,51 @@ fun ProductDetailsScreen(
     val scope = rememberCoroutineScope()
     val user = viewModel.currentUser.collectAsState().value
 
-    val product = remember(productId, scannedBarcode) {
-        productId?.let { viewModel.getProductByIdNow(it) }
-            ?: scannedBarcode?.let { viewModel.getProductsByBarcodeNow(it).firstOrNull() }
-    } ?: return
 
-    val isGeneral = productId == null && scannedBarcode != null
 
-    var averageRating by remember { mutableStateOf(0f) }
-    var userRating by remember { mutableStateOf(0f) }
-    var showRatingDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(product, isGeneral) {
-        if (!isGeneral) {
-            averageRating = viewModel.getAverageRating(product.barcode, product.storeName)
-            userRating = viewModel.getUserRating(
-                product.barcode,
-                product.storeName,
-                user?.id ?: ""
-            ) ?: 0f
+    val product by produceState<Product?>(initialValue = null, productId, scannedBarcode) {
+        value = when {
+            productId != null -> viewModel.getProductById(productId)
+            scannedBarcode != null -> viewModel.getProductsByBarcodeNow(scannedBarcode).firstOrNull()
+            else -> null
         }
     }
 
-    val prices = viewModel.getProductsByBarcodeNow(product.barcode).map { it.price }
+
+    if (product == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    val p = product!! // ✅ نتعامل معه بثقة لأنه تحقّقنا أعلاه
+    val isGeneral = productId == null && scannedBarcode != null
+
+    var showRatingDialog by remember { mutableStateOf(false) }
+    val priceHistories by viewModel.priceHistories.collectAsState()
+    val lastHistory = viewModel.getLastPriceHistory(p)
+
+    var averageRating by remember { mutableStateOf(0f) }
+    var ratingsCount by remember { mutableStateOf(0) }
+    var userRating by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(priceHistories) {
+        lastHistory?.let {
+            averageRating = it.averageRating.toFloat()
+            ratingsCount = it.ratingsCount
+            userRating = viewModel.getUserRating(p.barcode, p.storeName, user?.id ?: "") ?: 0f
+        }
+    }
+
+    LaunchedEffect(p, isGeneral) {
+        if (!isGeneral) {
+            averageRating = viewModel.getAverageRating(p.barcode, p.storeName)
+            userRating = viewModel.getUserRating(p.barcode, p.storeName, user?.id ?: "") ?: 0f
+        }
+    }
+
+    val prices = viewModel.getProductsByBarcodeNow(p.barcode).map { it.price }
     val hasPrices = prices.isNotEmpty()
     val minPrice = prices.minOrNull() ?: 0.0
     val maxPrice = prices.maxOrNull() ?: 0.0
@@ -73,7 +98,7 @@ fun ProductDetailsScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(product.name, style = MaterialTheme.typography.titleLarge) },
+                    title = { Text(p.name, style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
@@ -87,21 +112,14 @@ fun ProductDetailsScreen(
             floatingActionButton = {
                 IconButton(
                     onClick = {
-                        navController.navigate(
-                            "add_product_screen" +
-                                    "?name=${product.name}" +
-                                    "&barcode=${product.barcode}" +
-                                    "&imageUrl=${product.imageUrl}" +
-                                    "&storeName=${product.storeName}" +
-                                    "&lat=${product.storeLocation?.latitude ?: 0f}" +
-                                    "&lng=${product.storeLocation?.longitude ?: 0f}" +
-                                    "&productId=${product.id}" +
-                                    "&isUpdateMode=${!isGeneral}"
-                        )
+                        navController.navigate("add_product") {
+                            launchSingleTop = true
+                        }
+                        navController.getBackStackEntry("add_product")
+                            .savedStateHandle
+                            .set("edit_product_id", p.id)
                     },
-                    modifier = Modifier
-                        .size(56.dp)
-                        .padding(4.dp),
+                    modifier = Modifier.size(56.dp).padding(4.dp)
                 ) {
                     Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = PrimaryColor)
                 }
@@ -118,7 +136,7 @@ fun ProductDetailsScreen(
                 item {
                     Image(
                         painter = rememberAsyncImagePainter(
-                            model = product.imageUrl,
+                            model = p.imageUrl,
                             placeholder = painterResource(id = R.drawable.placeholder_image)
                         ),
                         contentDescription = "صورة المنتج",
@@ -129,36 +147,34 @@ fun ProductDetailsScreen(
                         contentScale = ContentScale.Crop
                     )
                 }
-
                 item {
-                    Text(product.name, style = MaterialTheme.typography.headlineMedium)
-                    Text("📦 ${product.barcode}", style = MaterialTheme.typography.bodyMedium)
+                    Text(p.name, style = MaterialTheme.typography.headlineMedium)
+                    Text("📦 ${p.barcode}", style = MaterialTheme.typography.bodyMedium)
                 }
-
                 item {
                     Button(
-                        onClick = { navController.navigate("price_list/${product.barcode}") },
+                        onClick = { navController.navigate("price_list/${p.barcode}") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor)
                     ) {
                         Text("قارن الأسعار", color = OnPrimaryColor)
                     }
                 }
-
                 if (isGeneral && hasPrices) {
                     item { Text("📉 أقل سعر: $minPrice د.ج", style = MaterialTheme.typography.bodyMedium) }
                     item { Text("📈 أعلى سعر: $maxPrice د.ج", style = MaterialTheme.typography.bodyMedium) }
                     item {
-                        Text(
-                            "⚖️ متوسط السعر: ${"%.2f".format(avgPrice)} د.ج",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text("⚖️ متوسط السعر: ${"%.2f".format(avgPrice)} د.ج", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
-
                 if (!isGeneral) {
-                    item { Text("🏬 المتجر: ${product.storeName}", style = MaterialTheme.typography.bodyMedium) }
-                    product.storeLocation?.let { loc ->
+                    item {
+                        Text("💰 السعر الحالي: ${p.price} د.ج", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4CAF50))
+                    }
+                    item {
+                        Text("🏬 المتجر: ${p.storeName}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    p.storeLocation?.let { loc ->
                         item {
                             Text(
                                 "🌍 الموقع: خط العرض ${loc.latitude}، خط الطول ${loc.longitude}",
@@ -169,12 +185,18 @@ fun ProductDetailsScreen(
                     item {
                         Text("⭐ تقييم السعر:", style = MaterialTheme.typography.titleMedium)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            repeat(5) { i ->
-                                Icon(
-                                    Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = if (i < averageRating.toInt()) Color(0xFFFFC107) else Color.Gray
-                                )
+                            if (lastHistory != null) {
+                                repeat(5) { i ->
+                                    Icon(
+                                        Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (i < averageRating.toInt()) Color(0xFFFFC107) else Color.Gray
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text("(${ratingsCount} تقييمات)", style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                Text("⭐ لا يوجد تقييم بعد", style = MaterialTheme.typography.bodySmall)
                             }
                             Spacer(Modifier.width(8.dp))
                             TextButton(onClick = { showRatingDialog = true }) {
@@ -182,40 +204,39 @@ fun ProductDetailsScreen(
                             }
                         }
                     }
-                }
-            }
-
-            if (showRatingDialog) {
-                RatingDialog(
-                    currentRating = userRating,
-                    onDismiss = { showRatingDialog = false },
-                    onSubmit = { selected ->
-                        showRatingDialog = false
-                        scope.launch {
-                            val success = viewModel.submitPriceRating(
-                                barcode = product.barcode,
-                                storeName = product.storeName,
-                                rating = selected
+                    item {
+                        if (showRatingDialog) {
+                            RatingDialogM2(
+                                currentRating = averageRating,
+                                onDismiss = { showRatingDialog = false },
+                                onSubmit = { selectedRating ->
+                                    showRatingDialog = false
+                                    scope.launch {
+                                        try {
+                                            val uid = FirebaseAuth.getInstance().uid
+                                            if (uid.isNullOrEmpty()) {
+                                                Toast.makeText(context, "خطأ: المستخدم غير مسجل الدخول", Toast.LENGTH_SHORT).show()
+                                                return@launch
+                                            }
+                                            viewModel.rateProduct(p, selectedRating)
+                                        } catch (e: Exception) {
+                                            Log.e("RATE_ERROR", "فشل عند إرسال التقييم", e)
+                                            Toast.makeText(context, "حدث خطأ أثناء إرسال التقييم", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
                             )
-                            Toast.makeText(
-                                context,
-                                if (success) "تم حفظ التقييم" else "فشل في حفظ التقييم",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            if (success) {
-                                averageRating =
-                                    viewModel.getAverageRating(product.barcode, product.storeName)
-                            }
                         }
                     }
-                )
+                }
             }
         }
     }
 }
 
+
 @Composable
-private fun RatingDialog(
+fun RatingDialogM2(
     currentRating: Float,
     onDismiss: () -> Unit,
     onSubmit: (Float) -> Unit
@@ -233,7 +254,7 @@ private fun RatingDialog(
                 repeat(5) { i ->
                     IconButton(onClick = { selected = (i + 1).toFloat() }) {
                         Icon(
-                            Icons.Default.Star,
+                            imageVector = Icons.Default.Star,
                             contentDescription = null,
                             tint = if (i < selected.toInt()) Color(0xFFFFC107) else Color.Gray
                         )
@@ -242,10 +263,14 @@ private fun RatingDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSubmit(selected) }) { Text("حفظ") }
+            TextButton(onClick = { onSubmit(selected) }) {
+                Text("حفظ")
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
         }
     )
 }

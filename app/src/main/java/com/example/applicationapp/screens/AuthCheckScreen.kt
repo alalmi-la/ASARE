@@ -1,22 +1,31 @@
 package com.example.applicationapp.screens
 
-
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.navigation.NavHostController
+import User
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.navigation.NavController
+import com.example.applicationapp.viewmodel.ProductViewModel
 import com.google.firebase.auth.FirebaseAuth
-import kotlinx.coroutines.delay
 
 @Composable
-fun AuthCheckScreen(navController: NavHostController) {
-    val currentUser = FirebaseAuth.getInstance().currentUser
-
+fun AuthCheckScreen(
+    navController: NavController,
+    productViewModel: ProductViewModel
+) {
     LaunchedEffect(Unit) {
-        delay(500) // لإظهار لودينغ خفيف
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
         if (currentUser != null) {
+            val user = User(
+                id = currentUser.uid,
+                name = currentUser.displayName ?: "",
+                email = currentUser.email ?: "",
+                imageUrl = currentUser.photoUrl?.toString() ?: ""
+            )
+
+            // ✅ تحديث ViewModel بالحساب الحالي
+            productViewModel.setUser(user)
+
             navController.navigate("home") {
                 popUpTo("auth_check") { inclusive = true }
             }
@@ -25,9 +34,5 @@ fun AuthCheckScreen(navController: NavHostController) {
                 popUpTo("auth_check") { inclusive = true }
             }
         }
-    }
-
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
     }
 }

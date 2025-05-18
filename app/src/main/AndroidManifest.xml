@@ -25,6 +25,10 @@
         android:theme="@style/Theme.ApplicationAPP"
         android:usesCleartextTraffic="true">
 
+        <uses-library
+            android:name="android.view.translation"
+            android:required="false" />
+
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"

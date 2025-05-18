@@ -79,7 +79,7 @@ fun SmartShoppingScreen(
                     trailingIcon = {
                         IconButton(
                             onClick = {
-                                navController.navigate("barcode?fromShopping=true")
+                                navController.navigate("barcode_scanner?source=SMART_SHOPPING")
                             }
                         ) {
                             Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan Barcode")

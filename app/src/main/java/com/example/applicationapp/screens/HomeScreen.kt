@@ -156,7 +156,7 @@ fun HomeScreen(
             bottomBar = { BottomNavigationBar(navController) },
             floatingActionButton = {
                 ExtendedFloatingActionButton(
-                    onClick = { navController.navigate("add_product_screen") },
+                    onClick = { navController.navigate("add_product") },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text("إضافة منتج") },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -184,29 +184,29 @@ fun HomeScreen(
                     item(span = { GridItemSpan(2) }) {
                         Column {
                             Text(
-                                text = if (searchQuery.isNotBlank()) "نتائج البحث" else "كل المنتجات",
-                                style = MaterialTheme.typography.titleLarge
+                                text = when {
+                                    searchQuery.isNotBlank() -> "🔍 نتائج البحث"
+                                    else -> "📂 ${viewModel.currentSortType.value.displayName}"
+                                },
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.padding(start = 4.dp)
                             )
 
-                            if (searchQuery.isBlank()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "الترتيب حسب: ${viewModel.currentSortType.value.displayName}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
 
 
                     itemsIndexed(products) { index, product ->
+                        val rating = viewModel.getLastPriceRating(product)
+                        val count = viewModel.getLastPriceRatingsCount(product)
+
                         ProductCardTopRated(
                             product = product,
-                            onClick = {
-                                navController.navigate("product_details/${product.id}")
-                            }
+                            averageRating = rating,
+                            ratingsCount = count,
+                            onClick = { navController.navigate("product_details/${product.id}") }
                         )
+
                     }
 
                     if (isLoading) {

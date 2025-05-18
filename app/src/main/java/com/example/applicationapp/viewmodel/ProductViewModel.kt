@@ -10,8 +10,10 @@ import android.location.Location
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.applicationapp.model.PriceHistory
 import com.example.applicationapp.model.Store
 import com.example.applicationapp.repository.ProductRepository
+import com.example.applicationapp.screens.Menu.AppNotification
 import com.example.asare_montagrt.data.model.Product
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -41,13 +43,18 @@ enum class BarcodeSource {
     HOME
 }
 
+
 @HiltViewModel
 class ProductViewModel @Inject constructor(
     private val productRepository: ProductRepository
 ) : ViewModel() {
-    // ✅ حالة لتخزين المنتج المراد تعديله مؤقتاً
+    //  حالة لتخزين المنتج المراد تعديله مؤقتاً
     private val _editingProduct = MutableStateFlow<Product?>(null)
     val editingProduct: StateFlow<Product?> = _editingProduct
+
+    private val _notifications = MutableStateFlow<List<AppNotification>>(emptyList())
+    val notifications: StateFlow<List<AppNotification>> = _notifications
+
 
 
     private val _productList = MutableStateFlow<List<Product>>(emptyList())
@@ -76,6 +83,9 @@ class ProductViewModel @Inject constructor(
 
     private val _searchSuggestions = MutableStateFlow<List<String>>(emptyList())
     val searchSuggestions: StateFlow<List<String>> = _searchSuggestions
+    private val _priceHistories = MutableStateFlow<Map<String, List<PriceHistory>>>(emptyMap())
+    val priceHistories: StateFlow<Map<String, List<PriceHistory>>> = _priceHistories
+
 
     private val recentSearches = mutableListOf<Product>()
     private var currentProductLimit = 50L
@@ -222,6 +232,25 @@ class ProductViewModel @Inject constructor(
             }
         }
     }
+    fun loadNotifications() {
+        viewModelScope.launch {
+            val userId = _currentUser.value?.id ?: return@launch
+            val list = productRepository.getNotifications(userId)
+            _notifications.value = list
+        }
+    }
+    fun dismissNotification(notificationId: String) {
+        viewModelScope.launch {
+            val userId = _currentUser.value?.id ?: return@launch
+            productRepository.markNotificationDismissed(userId, notificationId)
+            loadNotifications() // إعادة تحميل بعد الحذف
+        }
+    }
+
+
+
+
+
 
 
 
@@ -237,7 +266,8 @@ class ProductViewModel @Inject constructor(
         storeName: String,
         barcode: String,
         imageUrl: String,
-        storeLocation: GeoPoint
+        storeLocation: GeoPoint,
+        userId: String
     ) {
         val newProduct = Product(
             id = java.util.UUID.randomUUID().toString(),
@@ -250,7 +280,7 @@ class ProductViewModel @Inject constructor(
         )
         viewModelScope.launch {
             // نفّذ الإضافة أو التحديث مرة واحدة فقط
-            val created = productRepository.addOrUpdateProduct(newProduct)
+            val created = productRepository.addOrUpdateProduct(newProduct, userId)
             // أعد تحميل القائمة
             loadProducts()
             // عرض رسالة نجاح أو تحديث
@@ -274,18 +304,7 @@ class ProductViewModel @Inject constructor(
 
 
 
-    fun updateProduct(product: Product) {
-        viewModelScope.launch {
-            val created = productRepository.addOrUpdateProduct(product)
-            loadProducts()
-            _operationResult.value = if (created)
-                "تمت إضافة المنتج في المتجر \"${product.storeName}\"."
-            else
-                "تم تحديث السعر في المتجر \"${product.storeName}\" بنجاح."
-            delay(2_000)
-            _operationResult.value = null
-        }
-    }
+
 
 
     fun deleteProduct(productId: String) {
@@ -294,6 +313,20 @@ class ProductViewModel @Inject constructor(
             loadProducts()
         }
     }
+    fun rateProduct(product: Product, rating: Float) = viewModelScope.launch {
+        _isLoading.value = true
+        val success = productRepository.recordAndRatePrice(product, rating)
+        if (success) {
+            loadPriceHistory(product.id)  // لإحضار المتوسط المحدث
+            _operationResult.value = "تم تقييم السعر بنجاح."
+        } else {
+            _operationResult.value = "فشل في إرسال التقييم."
+        }
+        delay(2000)
+        _operationResult.value = null
+        _isLoading.value = false
+    }
+
 
     fun getProductByIdNow(productId: String): Product? =
         _productList.value.find { it.id == productId }
@@ -309,21 +342,49 @@ class ProductViewModel @Inject constructor(
             onResult(exists)
         }
     }
-
-    suspend fun submitPriceRating(
-        barcode: String,
-        storeName: String,
-        rating: Float
-    ): Boolean {
-        val userId = _currentUser.value?.id ?: return false
-        return try {
-            productRepository.submitPriceRating(barcode, storeName, userId, rating.toInt())
-        } catch (e: Exception) {
-            // سجل الخطأ لسهولة التتبع
-            e.printStackTrace()
-            false
-        }
+    fun loadPriceHistory(productId: String) = viewModelScope.launch {
+        val historyList = productRepository.getPriceHistory(productId)
+        _priceHistories.value = _priceHistories.value + (productId to historyList)
     }
+    fun getLastPriceHistory(product: Product): PriceHistory? {
+        val historyList = priceHistories.value[product.id] ?: return null
+        return historyList
+            .filter { it.storeName == product.storeName }
+            .maxByOrNull { it.timestamp }
+    }
+
+    fun getLastPriceRating(product: Product): Double? {
+        return getLastPriceHistory(product)?.averageRating
+    }
+
+    fun getLastPriceRatingsCount(product: Product): Int {
+        return getLastPriceHistory(product)?.ratingsCount ?: 0
+    }
+
+
+
+
+
+
+    fun submitHistoryRating(
+        productId: String,
+        historyId: String,
+        rating: Float,
+        userId: String
+    ) = viewModelScope.launch {
+        val success = productRepository.submitPriceHistoryRating(productId, historyId, userId, rating)
+        if (success) {
+            loadPriceHistory(productId) // إعادة تحميل التقييمات بعد التحديث
+            _operationResult.value = "تم تقييم السعر بنجاح."
+        } else {
+            _operationResult.value = "فشل في إرسال التقييم."
+        }
+        delay(2000)
+        _operationResult.value = null
+    }
+
+
+
 
 
     suspend fun getAverageRating(barcode: String, storeName: String): Float =
@@ -337,11 +398,6 @@ class ProductViewModel @Inject constructor(
         .getUserPriceRating(barcode, storeName, userId)
         ?.toFloat()
 
-    suspend fun getPriceHistory(
-        barcode: String,
-        storeName: String
-    ): List<Pair<Long, Double>> =
-        productRepository.getPriceHistory(barcode, storeName)
 
     // ✅ دوال مساعدة جديدة
     fun setBarcodeSource(source: BarcodeSource) {
@@ -371,6 +427,8 @@ class ProductViewModel @Inject constructor(
             _isLoading.value = true
             productRepository.getProductsFlow(limit).collectLatest { products ->
                 _productList.value = products
+                products.forEach { loadPriceHistory(it.id) }
+
                 _isLoading.value = false
             }
         }

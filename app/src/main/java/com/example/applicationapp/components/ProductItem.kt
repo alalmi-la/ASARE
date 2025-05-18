@@ -26,11 +26,13 @@ import com.example.asare_montagrt.data.model.Product
 
 
 
-// 🔥 منتج بارز - بطاقة عمودية
+
 @Composable
 fun ProductCardFeatured(
     product: Product,
     onClick: () -> Unit = {}
+
+
 ) {
     Card(
         modifier = Modifier
@@ -106,7 +108,10 @@ fun ProductCardRecentSearch(
 fun ProductCardTopRated(
     product: Product,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {} ,
+    averageRating: Double? = null,
+    ratingsCount: Int = 0
+
 ) {
     val isNew = System.currentTimeMillis() - product.updatedAt < 7 * 24 * 60 * 60 * 1000 // 7 أيام
 
@@ -159,17 +164,27 @@ fun ProductCardTopRated(
                 maxLines = 1
             )
 
-            // ⭐ التقييم بالنجوم
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                repeat(5) { index ->
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = "Rating",
-                        tint = if (index < product.rating.toInt()) Color(0xFFFFC107) else Color(0xFFCCCCCC),
-                        modifier = Modifier.size(14.dp)
-                    )
+            if (averageRating != null && averageRating > 0.0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    repeat(5) { i ->
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = null,
+                            tint = if (i < averageRating.toInt()) Color(0xFFFFC107) else Color.Gray,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text(String.format("%.1f", averageRating), style = MaterialTheme.typography.labelSmall)
+                    if (ratingsCount > 0) {
+                        Spacer(Modifier.width(4.dp))
+                        Text("($ratingsCount)", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
+            } else {
+                Text("⭐ لا يوجد تقييم بعد", style = MaterialTheme.typography.labelSmall)
             }
+
 
             // 💰 السعر
             Text(

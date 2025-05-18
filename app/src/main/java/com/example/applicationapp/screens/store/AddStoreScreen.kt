@@ -47,7 +47,7 @@ fun AddStoreScreen(
         ?.observeAsState()
         ?: remember { mutableStateOf(null) }
 
-    // ✅ الإصلاح هنا باستخدام قيم مؤقتة
+
     LaunchedEffect(latFromMap, lngFromMap) {
         val lat = latFromMap
         val lng = lngFromMap

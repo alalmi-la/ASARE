@@ -1,10 +1,12 @@
 package com.example.applicationapp.repository
 
 import android.health.connect.datatypes.ExerciseRoute
+import android.util.Log
 import com.example.asare_montagrt.data.model.Product
 import com.example.applicationapp.model.PriceHistory
 import com.example.applicationapp.model.PriceRating
 import com.example.applicationapp.model.Store
+import com.example.applicationapp.screens.Menu.AppNotification
 import com.example.applicationapp.viewmodel.SortType
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -17,6 +19,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
 import kotlin.math.sqrt
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
+
 
 @Singleton
 class ProductRepository @Inject constructor(
@@ -38,33 +43,155 @@ class ProductRepository @Inject constructor(
      * يضيف أو يحدث المنتج نفسه (barcode + store) ثم يسجل التاريخ.
      * @return true إذا أُضيف جديد، false إذا حدّثنا موجود.
      */
-    suspend fun addOrUpdateProduct(product: Product): Boolean {
+    suspend fun addOrUpdateProduct(product: Product, userId: String): Boolean {
         val existing = getProductByBarcodeAndStore(
             product.barcode, product.storeName, product.storeLocation!!
         )
+
         return if (existing == null) {
-            productsCollection.add(product).await()
-            recordPriceHistory(product)
+            // 🟢 إضافة منتج جديد
+            val docRef = productsCollection.add(product).await()
+            val newId = docRef.id
+            val updatedProduct = product.copy(id = newId)
+
+            recordPriceHistory(updatedProduct, userId)
+
+            sendNotificationToAll(
+                title = "🆕 منتج جديد",
+                message = "تمت إضافة المنتج \"${updatedProduct.name}\" في متجر ${updatedProduct.storeName}",
+                productId = updatedProduct.id
+            )
+
             true
         } else {
+            // 🟡 تحديث منتج موجود
             productsCollection.document(existing.id)
                 .update("price", product.price, "updatedAt", System.currentTimeMillis())
                 .await()
-            recordPriceHistory(product)
+
+            val updatedProduct = product.copy(id = existing.id)
+
+            recordPriceHistory(updatedProduct, userId)
+
+            sendNotificationToAll(
+                title = "💲 تحديث سعر",
+                message = "تم تحديث سعر المنتج \"${updatedProduct.name}\" في متجر ${updatedProduct.storeName}",
+                productId = updatedProduct.id
+            )
+
             false
         }
     }
 
-    private suspend fun recordPriceHistory(product: Product) {
-        priceHistoryCollection.add(
-            mapOf(
-                "barcode"   to product.barcode,
-                "storeName" to product.storeName,
-                "price"     to product.price,
-                "timestamp" to System.currentTimeMillis()
-            )
-        ).await()
+
+    suspend fun getNotifications(userId: String): List<AppNotification> {
+        val all = firestore.collection("notifications")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .get().await()
+
+        val dismissed = firestore.collection("users")
+            .document(userId)
+            .collection("dismissed_notifications")
+            .get().await()
+            .documents.map { it.id }
+
+        return all.documents
+            .filter { it.id !in dismissed }
+            .map { doc ->
+                AppNotification(
+                    id = doc.id,
+                    title = doc.getString("title") ?: "",
+                    message = doc.getString("message") ?: "",
+                    timestamp = doc.getLong("timestamp") ?: 0L,
+                    productId = doc.getString("productId")
+                )
+            }
     }
+    suspend fun markNotificationDismissed(userId: String, notificationId: String) {
+        firestore.collection("users")
+            .document(userId)
+            .collection("dismissed_notifications")
+            .document(notificationId)
+            .set(mapOf("dismissed" to true))
+            .await()
+    }
+
+
+
+
+
+
+
+
+
+
+    // تخزين سجل السعر الجديد
+    private suspend fun recordPriceHistory(product: Product, userId: String): DocumentReference {
+        val geoPoint = com.google.firebase.firestore.GeoPoint(
+            product.storeLocation!!.latitude,
+            product.storeLocation.longitude
+        )
+
+        val priceEntry = mapOf(
+            "productId"     to product.id,
+            "storeName"     to product.storeName,
+            "storeLocation" to geoPoint,
+            "userId"        to userId,
+            "price"         to product.price,
+            "timestamp"     to System.currentTimeMillis(),
+            "averageRating" to 0.0,
+            "ratingsCount"  to 0
+        )
+
+        return firestore.collection("products")
+            .document(product.id)
+            .collection("price_history")
+            .add(priceEntry)
+            .await()
+    }
+
+    /** يضمن وجود سجل سعر ثم يضيف أو يحدث التقييم دفعة واحدة */
+    suspend fun recordAndRatePrice(product: Product, rating: Float): Boolean {
+        return try {
+            val userId = FirebaseAuth.getInstance().uid ?: return false
+            if (product.storeLocation == null) return false
+
+            val historyRef: DocumentReference = getLastPriceHistoryDoc(product.id, product.storeName)
+                ?: recordPriceHistory(product, userId)
+
+            val historyId = historyRef.id
+
+            submitPriceHistoryRating(product.id, historyId, userId, rating)
+        } catch (e: Exception) {
+            Log.e("FIRESTORE", "Error in recordAndRatePrice", e)
+            false
+        }
+    }
+
+    /** ترجع آخر وثيقة PriceHistory لكل متجر مرتبّ نزولياً */
+    private suspend fun getLastPriceHistoryDoc(
+        productId: String,
+        storeName: String
+    ): DocumentReference? {
+        val snap = firestore.collection("products")
+            .document(productId)
+            .collection("price_history")
+            .whereEqualTo("storeName", storeName)
+            .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(1)
+            .get()
+            .await()
+
+        return snap.documents.firstOrNull()?.reference
+    }
+
+
+
+
+
+
+
+
 
 
     /** تحديث بيانات منتج موجود */
@@ -80,7 +207,9 @@ class ProductRepository @Inject constructor(
     /** الحصول على منتج بالمعرف */
     suspend fun getProductById(productId: String): Product? {
         val snapshot = productsCollection.document(productId).get().await()
-        return snapshot.toObject(Product::class.java)?.copy(id = snapshot.id)
+        val data = snapshot.data ?: return null
+        return parseProduct(snapshot.id, data)
+
     }
 
     /** استعلام بسيط مع حد */
@@ -158,31 +287,61 @@ class ProductRepository @Inject constructor(
         })
     }
 
-    /** تسجيل تقييم سعر */
-    suspend fun submitPriceRating(
-        barcode: String,
-        storeName: String,
+    /** تسجيل تقييم على سجل سعر محدد */
+    suspend fun submitPriceHistoryRating(
+        productId: String,
+        historyId: String,
         userId: String,
-        rating: Int
+        rating: Float
     ): Boolean {
-        return try {
-            priceRatingsCollection
-                .document("$barcode-$storeName-$userId")
+        val historyRef = firestore.collection("products")
+            .document(productId)
+            .collection("price_history")
+            .document(historyId)
+
+        try {
+            // تحقق إذا كانت الوثيقة موجودة قبل التحديث
+            val docSnapshot = historyRef.get().await()
+            if (!docSnapshot.exists()) {
+                Log.e("Firestore", "Document does not exist")
+                return false
+            }
+
+            // حفظ التقييم
+            historyRef.collection("ratings")
+                .document(userId)
                 .set(
-                    PriceRating(
-                        productId = barcode,
-                        storeName = storeName,
-                        userId = userId,
-                        rating = rating.toFloat(),
-                        timestamp = System.currentTimeMillis()
+                    mapOf(
+                        "historyId" to historyId,
+                        "userId"    to userId,
+                        "rating"    to rating,
+                        "timestamp" to System.currentTimeMillis()
                     )
-                )
-                .await()
-            true
-        } catch (_: Exception) {
-            false
+                ).await()
+
+            // الحصول على التقييمات وحساب المتوسط
+            val ratingsSnap = historyRef.collection("ratings").get().await()
+            val ratings = ratingsSnap.documents.mapNotNull {
+                it.getDouble("rating")?.toFloat()
+            }
+            val average = if (ratings.isNotEmpty()) ratings.average() else 0.0
+            val count = ratings.size
+
+            // تحديث بيانات التقييم
+            historyRef.update(
+                "averageRating", average,
+                "ratingsCount", count
+            ).await()
+
+            return true
+        } catch (e: Exception) {
+            Log.e("Firestore", "Error in submitting price history rating", e)
+            return false
         }
     }
+
+
+
 
     /** اقتراح أسماء المنتجات (Autocomplete) */
     suspend fun getProductNames(query: String): List<String> {
@@ -213,20 +372,41 @@ class ProductRepository @Inject constructor(
         val snapshot = priceRatingsCollection.document(docId).get().await()
         return snapshot.getLong("rating")?.toInt()
     }
+    suspend fun sendNotificationToAll(title: String, message: String, productId: String? = null) {
+        val notification = mapOf(
+            "title" to title,
+            "message" to message,
+            "timestamp" to System.currentTimeMillis(),
+            "productId" to productId
+        )
+        firestore.collection("notifications").add(notification).await()
+    }
+
+
+
 
     /** سجل تاريخ الأسعار لمنتج */
-    suspend fun getPriceHistory(barcode: String, storeName: String): List<Pair<Long, Double>> {
-        val snapshot = priceHistoryCollection
-            .whereEqualTo("barcode", barcode)
-            .whereEqualTo("storeName", storeName)
-            .get()
-            .await()
-        return snapshot.documents.mapNotNull {
-            val ts    = it.getLong("timestamp") ?: return@mapNotNull null
-            val price = it.getDouble("price")    ?: return@mapNotNull null
-            ts to price
-        }.sortedBy { it.first }
+    suspend fun getPriceHistory(productId: String): List<PriceHistory> {
+        val snap = firestore.collection("products")
+            .document(productId)
+            .collection("price_history")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .get().await()
+
+        return snap.documents.map { doc ->
+            PriceHistory(
+                id            = doc.id,
+                productId     = doc.getString("productId") ?: "",
+                storeName     = doc.getString("storeName") ?: "",
+                userId        = doc.getString("userId") ?: "",
+                price         = doc.getDouble("price") ?: 0.0,
+                timestamp     = doc.getLong("timestamp") ?: 0L,
+                averageRating = doc.getDouble("averageRating") ?: 0.0,
+                ratingsCount  = (doc.getLong("ratingsCount") ?: 0L).toInt()
+            )
+        }
     }
+
 
     // ────────────────────────────────────
     // دوال Pagination الجديدة فقط
@@ -338,7 +518,7 @@ class ProductRepository @Inject constructor(
                 storeName     = data["storeName"] as? String ?: "",
                 storeLocation = data["storeLocation"] as? GeoPoint,
                 barcode       = data["barcode"] as? String ?: "",
-                brand         = data["brand"] as? String ?: ""
+
             )
         } catch (_: Exception) {
             null
