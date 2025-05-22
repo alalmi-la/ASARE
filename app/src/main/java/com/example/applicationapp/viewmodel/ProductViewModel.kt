@@ -89,7 +89,9 @@ class ProductViewModel @Inject constructor(
 
     private val recentSearches = mutableListOf<Product>()
     private var currentProductLimit = 50L
-    private var userLocation: Location? = null
+    private val _currentLocation = MutableStateFlow<Location?>(null)
+    val currentLocation: StateFlow<Location?> = _currentLocation
+
 
     // ✅ حالة جديدة: مصدر استدعاء شاشة الباركود
     private val _barcodeSource = MutableStateFlow<BarcodeSource?>(null)
@@ -159,8 +161,8 @@ class ProductViewModel @Inject constructor(
             SortType.TOP_RATED -> products.sortedByDescending { it.rating }
             SortType.FEATURED -> products.sortedByDescending { it.updatedAt }
             SortType.NEARBY -> {
-                userLocation?.let { loc ->
-                    products.sortedBy { product ->
+                _currentLocation.value?.let { loc ->
+                products.sortedBy { product ->
                         product.storeLocation?.let { geo ->
                             val storeLoc = Location("store").apply {
                                 latitude = geo.latitude
@@ -227,7 +229,8 @@ class ProductViewModel @Inject constructor(
                 try {
                     val client: FusedLocationProviderClient =
                         LocationServices.getFusedLocationProviderClient(context)
-                    userLocation = client.lastLocation.await()
+                    _currentLocation.value = client.lastLocation.await()
+
                 } catch (_: Exception) { }
             }
         }
@@ -246,6 +249,65 @@ class ProductViewModel @Inject constructor(
             loadNotifications() // إعادة تحميل بعد الحذف
         }
     }
+    fun getUniqueProducts(): List<Product> {
+        return _productList.value
+            .groupBy { it.barcode }
+            .mapNotNull { group -> group.value.minByOrNull { it.price } }
+    }
+    fun analyzeCheapestStoresForSelectedProducts(onResult: (List<Pair<Store, Double>>) -> Unit) {
+        viewModelScope.launch {
+            val selectedBarcodes = _selectedProducts.value.map { it.barcode }.toSet()
+            val allProducts = productRepository.getAllProducts()
+
+            val storesWithPrices = allProducts
+                .groupBy { it.storeName to it.storeLocation }
+                .mapNotNull { (storeKey, productsInStore) ->
+                    val storeLocation = storeKey.second
+                    if (storeLocation != null) {
+                        val barcodesInStore = productsInStore.map { it.barcode }.toSet()
+                        if (selectedBarcodes.all { it in barcodesInStore }) {
+                            val totalPrice = selectedBarcodes.sumOf { barcode ->
+                                productsInStore
+                                    .filter { it.barcode == barcode }
+                                    .minByOrNull { it.price }?.price ?: 0.0
+                            }
+                            val store = Store(storeKey.first, storeLocation.latitude, storeLocation.longitude)
+                            store to totalPrice
+                        } else null
+                    } else null
+                }
+                .sortedBy { it.second }
+
+            onResult(storesWithPrices)
+        }
+    }
+    fun searchProductsLive(query: String, onResult: (List<Product>) -> Unit) {
+        viewModelScope.launch {
+            val results = if (query.all { it.isDigit() }) {
+                productRepository.getProductsByBarcode(query)
+            } else {
+                productRepository.getProductsByName(query)
+            }
+            onResult(results)
+        }
+    }
+
+
+    fun clearSelectedProducts() {
+        _selectedProducts.value = emptyList()
+    }
+    fun removeSelectedProduct(product: Product) {
+        val currentList = _selectedProducts.value.toMutableList()
+        currentList.removeAll { it.barcode == product.barcode }
+        _selectedProducts.value = currentList
+    }
+    fun fetchProductByBarcodeFromDatabase(barcode: String, onResult: (Product?) -> Unit) {
+        viewModelScope.launch {
+            val products = productRepository.getProductsByBarcode(barcode)
+            val best = products.minByOrNull { it.price }
+            onResult(best)
+        }
+    }
 
 
 
@@ -254,8 +316,13 @@ class ProductViewModel @Inject constructor(
 
 
 
-    fun getUserLocation(): Location? = userLocation
 
+
+
+
+
+
+    fun getUserLocation(): Location? = _currentLocation.value
     fun setPickedLocation(latitude: Double, longitude: Double) {
         _pickedLocation.value = Pair(latitude, longitude)
     }
@@ -297,9 +364,12 @@ class ProductViewModel @Inject constructor(
 
     fun addSelectedProduct(product: Product) {
         val currentList = _selectedProducts.value.toMutableList()
-        currentList.add(product)
-        _selectedProducts.value = currentList
+        if (currentList.none { it.barcode == product.barcode }) {
+            currentList.add(product)
+            _selectedProducts.value = currentList
+        }
     }
+
 
 
 
@@ -460,8 +530,8 @@ class ProductViewModel @Inject constructor(
     }
 
     fun getHomeNearbyProducts(): List<Product> {
-        return userLocation?.let { loc ->
-            _productList.value.sortedBy { product ->
+        return _currentLocation.value?.let { loc ->
+        _productList.value.sortedBy { product ->
                 product.storeLocation?.let { geo ->
                     val storeLoc = Location("store").apply {
                         latitude = geo.latitude

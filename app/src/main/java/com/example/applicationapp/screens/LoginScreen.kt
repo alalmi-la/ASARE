@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.applicationapp.R
+import com.example.applicationapp.components.TopBarWithLogo
 import com.example.applicationapp.ui.theme.*
 import com.example.applicationapp.viewmodel.ProductViewModel
 import com.google.android.gms.auth.api.identity.BeginSignInRequest
@@ -99,9 +100,9 @@ fun LoginScreen(navController: NavController, viewModel: ProductViewModel = view
     AppTheme {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(if (isRegisterMode) "Sign Up" else "Sign In", color = PricesTextPrimary) },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PricesBackgroundColor)
+                TopBarWithLogo(
+                    title = if (isRegisterMode) "Sign Up" else "Sign In",
+                    showBack = false
                 )
             },
             containerColor = PricesBackgroundColor

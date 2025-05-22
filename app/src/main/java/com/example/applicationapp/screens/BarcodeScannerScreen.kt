@@ -1,12 +1,7 @@
 package com.example.applicationapp.screens
 
 import android.Manifest
-import android.content.Context
-import android.location.Location
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -25,10 +20,9 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.LifecycleOwner
 import androidx.navigation.NavController
-import androidx.core.content.ContextCompat
 import com.example.applicationapp.components.BottomNavigationBar
+import com.example.applicationapp.components.TopBarWithLogo
 import com.example.applicationapp.ui.theme.*
 import com.example.applicationapp.viewmodel.BarcodeSource
 import com.example.applicationapp.viewmodel.ProductViewModel
@@ -37,10 +31,10 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import com.example.asare_montagrt.data.model.Product
 import java.util.concurrent.Executors
 
 @androidx.annotation.OptIn(ExperimentalGetImage::class)
-@OptIn(ExperimentalGetImage::class)
 private fun processImageProxy(
     imageProxy: ImageProxy,
     onBarcodeDetected: (String) -> Unit
@@ -76,73 +70,47 @@ fun BarcodeScannerScreen(
 
     val scannedBarcode by viewModel.scannedBarcode.collectAsState()
     val barcodeSource by viewModel.barcodeSource.collectAsState()
+    val isNavigated = remember { mutableStateOf(false) }
 
-    //  اطلب صلاحية الكاميرا
+    // طلب إذن الكاميرا
     LaunchedEffect(Unit) {
         permissionState.launchPermissionRequest()
     }
 
-    //  تنظيف الباركود عند الخروج من الشاشة لأي سبب
+    // تنظيف الباركود عند الخروج
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearScannedBarcode()
         }
     }
 
-    val isNavigated = remember { mutableStateOf(false) }
-
-
+    // التعامل مع الباركود عند المسح
     LaunchedEffect(scannedBarcode) {
         val code = scannedBarcode ?: return@LaunchedEffect
-
-        if (isNavigated.value) return@LaunchedEffect  // ✅ لا تكرر التنقل
+        if (isNavigated.value) return@LaunchedEffect
         isNavigated.value = true
 
-        val products = viewModel.getProductsByBarcodeNow(code)
-
-        when (barcodeSource) {
-            BarcodeSource.SMART_SHOPPING -> {
-                if (products.isNotEmpty()) {
-                    viewModel.addSelectedProduct(products.first())
-                }
-                navController.popBackStack()
-            }
-
-            BarcodeSource.ADD_PRODUCT -> {
-                navController.popBackStack()
-            }
-
-            BarcodeSource.HOME, BarcodeSource.PRICE_LIST, null -> {
-                if (products.isNotEmpty()) {
-                    navController.navigate("product_details?barcode=$code")
-                } else {
-                    navController.navigate("add_product") {
-                        popUpTo("add_product") { inclusive = true } // ✅ يمنع التكرار
-                    }
-                }
+        val localProducts = viewModel.getProductsByBarcodeNow(code)
+        if (localProducts.isNotEmpty()) {
+            handleBarcodeNavigation(code, localProducts.first(), navController, viewModel)
+        } else {
+            viewModel.fetchProductByBarcodeFromDatabase(code) { remoteProduct ->
+                handleBarcodeNavigation(code, remoteProduct, navController, viewModel)
             }
         }
-
-
     }
 
-
-
-
-    //  واجهة المستخدم
+    // واجهة المستخدم
     PricesTheme {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text("Barcode Scanner", color = PricesTextPrimary) },
-                    navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = PricesTextPrimary)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PricesBackgroundColor)
+                TopBarWithLogo(
+                    title = "Barcode Scanner",
+                    showBack = true,
+                    onBackClick = { navController.popBackStack() }
                 )
-            },
+            }
+            ,
             bottomBar = { BottomNavigationBar(navController) },
             containerColor = PricesBackgroundColor
         ) { padding ->
@@ -169,12 +137,12 @@ fun BarcodeScannerScreen(
         }
     }
 
-    //  تشغيل الكاميرا وتحليل الصورة
+    // إعداد الكاميرا وتشغيل التحليل
     LaunchedEffect(permissionState.status.isGranted) {
         if (!permissionState.status.isGranted) return@LaunchedEffect
 
         val provider = cameraProviderFuture.get()
-        val preview = androidx.camera.core.Preview.Builder().build().also {
+        val preview = Preview.Builder().build().also {
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
 
@@ -197,5 +165,40 @@ fun BarcodeScannerScreen(
             preview,
             analysis
         )
+    }
+}
+
+private fun handleBarcodeNavigation(
+    barcode: String,
+    product: Product?,
+    navController: NavController,
+    viewModel: ProductViewModel
+) {
+    when (viewModel.barcodeSource.value) {
+        BarcodeSource.SMART_SHOPPING -> {
+            if (product != null) {
+                viewModel.addSelectedProduct(product)
+            }
+            navController.popBackStack()
+        }
+
+        BarcodeSource.ADD_PRODUCT -> {
+            if (product == null) {
+                navController.navigate("add_product")
+            } else {
+                viewModel.setEditingProduct(product)
+                navController.navigate("add_product")
+            }
+        }
+
+        BarcodeSource.HOME, BarcodeSource.PRICE_LIST, null -> {
+            if (product != null) {
+                navController.navigate("product_details?barcode=$barcode")
+            } else {
+                navController.navigate("add_product") {
+                    popUpTo("add_product") { inclusive = true }
+                }
+            }
+        }
     }
 }

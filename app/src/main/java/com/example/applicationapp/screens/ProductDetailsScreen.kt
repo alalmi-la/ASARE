@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.example.applicationapp.R
+import com.example.applicationapp.components.TopBarWithLogo
 import com.example.applicationapp.ui.theme.AppTheme
 import com.example.applicationapp.ui.theme.OnPrimaryColor
 import com.example.applicationapp.ui.theme.PrimaryColor
@@ -97,16 +98,10 @@ fun ProductDetailsScreen(
     AppTheme {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(p.name, style = MaterialTheme.typography.titleLarge) },
-                    navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
+                TopBarWithLogo(
+                    title = p.name,
+                    showBack = true,
+                    onBackClick = { navController.popBackStack() }
                 )
             },
             floatingActionButton = {

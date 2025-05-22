@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ApplicationAPP</string>
+    <string name="app_name">Compare Price</string>
     <string name="default_web_client_id">859871452183-omta6i0gk2r1lkb0sba83qog5fe2q3gb.apps.googleusercontent.com</string>
     <string name="login_title">تسجيل الدخول</string>
     <string name="email_hint">البريد الإلكتروني</string>

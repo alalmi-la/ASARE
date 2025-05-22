@@ -31,6 +31,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.cloudinary.android.MediaManager
 import com.cloudinary.android.callback.ErrorInfo
 import com.cloudinary.android.callback.UploadCallback
+import com.example.applicationapp.components.TopBarWithLogo
 import com.example.applicationapp.ui.theme.OnPrimaryColor
 import com.example.applicationapp.ui.theme.PrimaryColor
 import com.example.applicationapp.viewmodel.ProductViewModel
@@ -162,21 +163,13 @@ fun AddProductScreen(
     // UI
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (localUpdateMode) "تعديل المنتج" else "إضافة منتج",
-                        color = OnPrimaryColor
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = OnPrimaryColor)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PrimaryColor)
+            TopBarWithLogo(
+                title = if (localUpdateMode) "تعديل المنتج" else "إضافة منتج",
+                showBack = true,
+                onBackClick = { navController.popBackStack() }
             )
         }
+
     ) { padding ->
         Column(
             Modifier

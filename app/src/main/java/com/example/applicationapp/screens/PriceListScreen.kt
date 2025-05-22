@@ -23,6 +23,8 @@ import com.example.applicationapp.viewmodel.ProductViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.navigation.NavController
+import com.example.applicationapp.components.TopBarWithLogo
+import com.example.asare_montagrt.data.model.Product
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,38 +45,29 @@ fun PriceListScreen(
 
     }
 
-    val allProducts = if (barcode.isNotBlank()) {
-        viewModel.getProductsByBarcodeNow(barcode)
-    } else viewModel.getProductsByName(barcode)
+    val localProducts = viewModel.getProductsByBarcodeNow(barcode)
+    val allProductsState = remember { mutableStateOf<List<Product>>(localProducts) }
 
-    val sortedProducts = viewModel.getProductsSorted(allProducts, sortOption, userLocation)
+    LaunchedEffect(barcode) {
+        if (barcode.isNotBlank() && localProducts.isEmpty()) {
+            viewModel.fetchProductByBarcodeFromDatabase(barcode) { result ->
+                if (result != null) {
+                    allProductsState.value = listOf(result)
+                }
+            }
+        }
+    }
+
+    val sortedProducts = viewModel.getProductsSorted(allProductsState.value, sortOption, userLocation)
     val firstProduct = sortedProducts.firstOrNull()
 
     AppTheme {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            firstProduct?.imageUrl?.let { imageUrl ->
-                                Image(
-                                    painter = rememberAsyncImagePainter(imageUrl),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(MaterialTheme.shapes.medium),
-                                    contentScale = ContentScale.Crop
-                                )
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("أسعار المنتج", style = MaterialTheme.typography.titleLarge)
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
-                        }
-                    },
+                TopBarWithLogo(
+                    title = "أسعار المنتج",
+                    showBack = true,
+                    onBackClick = { navController.popBackStack() },
                     actions = {
                         var expanded by remember { mutableStateOf(false) }
                         IconButton(onClick = { expanded = true }) {
@@ -93,7 +86,9 @@ fun PriceListScreen(
                         }
                     }
                 )
-            }
+
+
+        }
         ) { padding ->
             if (sortedProducts.isEmpty()) {
                 Box(

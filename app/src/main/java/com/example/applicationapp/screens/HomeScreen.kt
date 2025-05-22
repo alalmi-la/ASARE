@@ -1,7 +1,10 @@
 package com.example.applicationapp.screens
 
+import androidx.camera.core.ExperimentalGetImage
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.material3.ListItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -13,14 +16,18 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.applicationapp.components.BottomNavigationBar
 import com.example.applicationapp.components.ProductCardTopRated
+import com.example.applicationapp.components.TopBarWithLogo
 import com.example.applicationapp.ui.theme.AppTheme
 import com.example.applicationapp.viewmodel.ProductViewModel
 import com.example.applicationapp.viewmodel.SortType
+import com.example.asare_montagrt.data.model.Product
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -30,6 +37,9 @@ fun HomeScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showSuggestions by remember { mutableStateOf(false) }
     var showFilterMenu by remember { mutableStateOf(false) }
+    val liveSearchResults = remember { mutableStateOf<List<Product>>(emptyList()) }
+
+
 
     val context = LocalContext.current
     val isLoading by viewModel.isLoading.collectAsState()
@@ -44,7 +54,7 @@ fun HomeScreen(
     }
 
     val products = when {
-        searchQuery.isNotBlank() -> viewModel.getProductsByName(searchQuery)
+        searchQuery.isNotBlank() -> liveSearchResults.value
         else -> when (sortType) {
             SortType.ALL        -> productsSource
             SortType.TOP_RATED  -> viewModel.getHomeTopRatedProducts()
@@ -53,6 +63,7 @@ fun HomeScreen(
         }
     }
 
+
     val gridState = rememberLazyGridState()
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isLoading)
 
@@ -60,8 +71,9 @@ fun HomeScreen(
         Scaffold(
             topBar = {
                 Column {
-                    TopAppBar(
-                        title = { Text("المنتجات", color = MaterialTheme.colorScheme.onBackground) },
+                    TopBarWithLogo(
+                        title = "المنتجات",
+                        showBack = false,
                         actions = {
                             IconButton(onClick = { showMenu = !showMenu }) {
                                 Icon(Icons.Default.Menu, contentDescription = "قائمة الخيارات")
@@ -95,19 +107,25 @@ fun HomeScreen(
                                     }
                                 )
                             }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background
-                        )
+                        }
                     )
 
+                    // ⬇️ حقل البحث يبقى كما هو
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = {
                                 searchQuery = it
                                 showSuggestions = it.isNotBlank()
-                                if (it.isNotBlank()) viewModel.fetchAutocompleteSuggestions(it)
+
+                                if (it.isNotBlank()) {
+                                    viewModel.fetchAutocompleteSuggestions(it)
+                                    viewModel.searchProductsLive(it) { results ->
+                                        liveSearchResults.value = results
+                                    }
+                                } else {
+                                    liveSearchResults.value = emptyList()
+                                }
                             },
                             placeholder = { Text("ابحث عن منتج...") },
                             modifier = Modifier.fillMaxWidth(),
@@ -135,20 +153,35 @@ fun HomeScreen(
                             }
                         )
 
+
                         if (showSuggestions && suggestions.isNotEmpty()) {
-                            Column {
-                                suggestions.take(5).forEach { suggestion ->
-                                    TextButton(
-                                        onClick = {
-                                            searchQuery = suggestion
-                                            showSuggestions = false
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(suggestion)
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                elevation = CardDefaults.cardElevation(8.dp)
+                            ) {
+                                Column {
+                                    suggestions.take(5).forEach { suggestion ->
+                                        ListItem(
+                                            headlineContent = { Text(suggestion) },
+                                            leadingContent = {
+                                                Icon(Icons.Default.Search, contentDescription = null)
+                                            },
+                                            modifier = Modifier.clickable {
+                                                searchQuery = suggestion
+                                                showSuggestions = false
+                                                viewModel.searchProductsLive(suggestion) { results ->
+                                                    liveSearchResults.value = results
+                                                }
+                                            }
+                                        )
+
+                                        Divider()
                                     }
                                 }
                             }
+
                         }
                     }
                 }

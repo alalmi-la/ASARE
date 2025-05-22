@@ -19,7 +19,12 @@ fun NavigationGraph(
     navController: NavHostController,
     productViewModel: ProductViewModel
 ) {
-    NavHost(navController = navController, startDestination = "auth_check") {
+    NavHost(navController = navController, startDestination = "splash")
+    {
+        composable("splash") {
+            SplashScreen(navController = navController)
+        }
+
 
         composable("auth_check") {
         AuthCheckScreen(
@@ -133,16 +138,28 @@ fun NavigationGraph(
 
         // خريطة المتاجر – وضعي select أو pick حسب المعامل
         composable(
-            route = "store_map?mode={mode}",
+            route = "store_map?mode={mode}&lat={lat}&lng={lng}",
             arguments = listOf(
-                navArgument("mode") {
-                    type = NavType.StringType
-                    defaultValue = "pick"
-                }
+                navArgument("mode") { type = NavType.StringType; defaultValue = "pick" },
+                navArgument("lat")  { type = NavType.FloatType; defaultValue = -1f },
+                navArgument("lng")  { type = NavType.FloatType; defaultValue = -1f }
             )
         ) { backStackEntry ->
             val mode = backStackEntry.arguments?.getString("mode") ?: "pick"
-            StoreMapScreen(navController = navController, viewModel = productViewModel, mode = mode)
+            val lat = backStackEntry.arguments?.getFloat("lat") ?: -1f
+            val lng = backStackEntry.arguments?.getFloat("lng") ?: -1f
+
+            val storeLat = if (lat != -1f) lat.toDouble() else null
+            val storeLng = if (lng != -1f) lng.toDouble() else null
+
+            StoreMapScreen(
+                navController = navController,
+                viewModel = productViewModel,
+                mode = mode,
+                storeLat = storeLat,
+                storeLng = storeLng
+            )
         }
+
     }
 }

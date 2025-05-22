@@ -17,8 +17,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
+import com.example.applicationapp.components.TopBarWithLogo
 import com.example.applicationapp.model.Store
 import com.example.applicationapp.ui.theme.PricesBackgroundColor
 import com.example.applicationapp.ui.theme.PricesSelectedIconColor
@@ -30,6 +32,7 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
 
@@ -38,7 +41,9 @@ import com.google.maps.android.compose.rememberMarkerState
 fun StoreMapScreen(
     navController: NavController,
     viewModel: ProductViewModel,
-    mode: String = "pick"
+    mode: String = "pick" ,
+    storeLat: Double? = null,
+    storeLng: Double? = null
 ) {
     val context = LocalContext.current
     val stores by viewModel.storeList.collectAsState()
@@ -46,21 +51,17 @@ fun StoreMapScreen(
     var selectedStore by remember { mutableStateOf<Store?>(null) }
     var selectedLocation by remember { mutableStateOf<LatLng?>(null) }
     val cameraPositionState = rememberCameraPositionState()
+    val userLocation by viewModel.currentLocation.collectAsState()
+    val storePosition = if (storeLat != null && storeLng != null) LatLng(storeLat, storeLng) else null
+    val userPosition = userLocation?.let { LatLng(it.latitude, it.longitude) }
+
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("اختيار المتجر", color = PricesTextPrimary) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "رجوع",
-                            tint = PricesTextPrimary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PricesBackgroundColor)
+            TopBarWithLogo(
+                title = "اختيار المتجر",
+                showBack = true,
+                onBackClick = { navController.popBackStack() }
             )
         },
         floatingActionButton = {
@@ -138,6 +139,27 @@ fun StoreMapScreen(
                 }
             }
         ) {
+            // عرض المسار بين المستخدم والمتجر إذا كانت المعطيات متوفرة
+            if (mode == "route" && userPosition != null && storePosition != null) {
+                Polyline(
+                    points = listOf(userPosition, storePosition),
+                    color = Color.Blue,
+                    width = 8f
+                )
+
+                Marker(
+                    state = MarkerState(position = userPosition),
+                    title = "موقعك",
+                    snippet = "هذا موقعك الحالي"
+                )
+
+                Marker(
+                    state = MarkerState(position = storePosition),
+                    title = "المتجر",
+                    snippet = "موقع المتجر"
+                )
+            }
+
             if (mode == "pick") {
                 stores.forEach { store ->
                     val pos = LatLng(store.latitude, store.longitude)

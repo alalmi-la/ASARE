@@ -498,6 +498,11 @@ class ProductRepository @Inject constructor(
         val dy = p1.longitude - p2.longitude
         return sqrt(dx.pow(2) + dy.pow(2))
     }
+    suspend fun getAllProducts(): List<Product> {
+        val snapshot = productsCollection.get().await()
+        return snapshot.documents.mapNotNull { parseProduct(it.id, it.data) }
+    }
+
 
 
 
