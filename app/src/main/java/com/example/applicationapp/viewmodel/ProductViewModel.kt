@@ -6,6 +6,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.location.Location
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
@@ -404,14 +406,16 @@ class ProductViewModel @Inject constructor(
     fun checkAndAddStore(
         name: String,
         location: GeoPoint,
+        address: String = "",
         onResult: (Boolean) -> Unit
     ) {
         viewModelScope.launch {
             val exists = productRepository.doesStoreExist(name, location)
-            if (!exists) productRepository.addStore(name, location)
+            if (!exists) productRepository.addStore(name, location, address) // ✅ مرر العنوان هنا
             onResult(exists)
         }
     }
+
     fun loadPriceHistory(productId: String) = viewModelScope.launch {
         val historyList = productRepository.getPriceHistory(productId)
         _priceHistories.value = _priceHistories.value + (productId to historyList)
@@ -514,6 +518,19 @@ class ProductViewModel @Inject constructor(
             }
         }
     }
+    fun getAddressFromLocation(context: Context, location: GeoPoint, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "عنوان غير معروف"
+                onResult(address)
+            } catch (e: Exception) {
+                onResult("تعذر جلب العنوان")
+            }
+        }
+    }
+
 
     fun loadMoreProducts() {
         currentProductLimit += 50

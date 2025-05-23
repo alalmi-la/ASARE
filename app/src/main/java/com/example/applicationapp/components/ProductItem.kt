@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material3.*
@@ -14,95 +15,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.applicationapp.model.Store
 import com.example.applicationapp.ui.theme.PricesSelectedIconColor
 import com.example.applicationapp.ui.theme.PricesTextSecondary
 import com.example.asare_montagrt.data.model.Product
 
 
-
-
-@Composable
-fun ProductCardFeatured(
-    product: Product,
-    onClick: () -> Unit = {}
-
-
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp)
-            .clickable { onClick() }
-            .shadow(6.dp, RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Row(Modifier.padding(16.dp)) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(product.imageUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = product.name,
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(Modifier.weight(1f)) {
-                Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text("${product.price} DZD", color = PricesSelectedIconColor, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("📍 ${product.storeName}", style = MaterialTheme.typography.bodySmall, color = PricesTextSecondary)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text("🔥 مميز", color = Color.Red, fontSize = 12.sp)
-            }
-        }
-    }
-}
-
-// 🕵️‍♂️ آخر ما بحثت عنه - ListItem أنيق
-@Composable
-fun ProductCardRecentSearch(
-    product: Product,
-    onClick: () -> Unit = {}
-) {
-    ListItem(
-        headlineContent = {
-            Text(product.name, maxLines = 1)
-        },
-        supportingContent = {
-            Text("${product.price} DZD", color = PricesSelectedIconColor)
-        },
-        leadingContent = {
-            AsyncImage(
-                model = product.imageUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            )
-        },
-        trailingContent = {
-            Icon(Icons.Outlined.AccessTime, contentDescription = "Recent", tint = PricesTextSecondary)
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    )
-}
 
 @Composable
 fun ProductCardTopRated(
@@ -207,4 +133,101 @@ fun ProductCardTopRated(
         }
     }
 }
+@Composable
+fun ProductItemCard(
+    product: Product,
+    isSelected: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(110.dp)
+            .padding(vertical = 6.dp)
+            .shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(product.imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = product.name,
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = product.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = onCheckedChange
+            )
+        }
+    }
+}
+@Composable
+fun StoreResultCard(
+    store: Store,
+    total: Double,
+    onNavigateClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    store.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "الإجمالي: $total DZD",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            IconButton(onClick = onNavigateClick) {
+                Icon(
+                    imageVector = Icons.Default.Place,
+                    contentDescription = "الخريطة"
+                )
+            }
+        }
+    }
+}
+
+
 

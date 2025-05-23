@@ -1,11 +1,11 @@
 package com.example.applicationapp.screens
 
+import android.location.Geocoder
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.example.applicationapp.R
 import com.example.applicationapp.components.TopBarWithLogo
+import com.example.applicationapp.model.Store
 import com.example.applicationapp.ui.theme.AppTheme
 import com.example.applicationapp.ui.theme.OnPrimaryColor
 import com.example.applicationapp.ui.theme.PrimaryColor
@@ -45,8 +47,6 @@ fun ProductDetailsScreen(
     val scope = rememberCoroutineScope()
     val user = viewModel.currentUser.collectAsState().value
 
-
-
     val product by produceState<Product?>(initialValue = null, productId, scannedBarcode) {
         value = when {
             productId != null -> viewModel.getProductById(productId)
@@ -55,7 +55,6 @@ fun ProductDetailsScreen(
         }
     }
 
-
     if (product == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -63,7 +62,7 @@ fun ProductDetailsScreen(
         return
     }
 
-    val p = product!! // ✅ نتعامل معه بثقة لأنه تحقّقنا أعلاه
+    val p = product!!
     val isGeneral = productId == null && scannedBarcode != null
 
     var showRatingDialog by remember { mutableStateOf(false) }
@@ -73,6 +72,10 @@ fun ProductDetailsScreen(
     var averageRating by remember { mutableStateOf(0f) }
     var ratingsCount by remember { mutableStateOf(0) }
     var userRating by remember { mutableStateOf(0f) }
+
+    // قائمة المتاجر المحمّلة
+    val stores by viewModel.storeList.collectAsState(initial = emptyList<Store>())
+    var storeAddress by remember { mutableStateOf("") }
 
     LaunchedEffect(priceHistories) {
         lastHistory?.let {
@@ -86,6 +89,24 @@ fun ProductDetailsScreen(
         if (!isGeneral) {
             averageRating = viewModel.getAverageRating(p.barcode, p.storeName)
             userRating = viewModel.getUserRating(p.barcode, p.storeName, user?.id ?: "") ?: 0f
+        }
+    }
+
+    // جلب عنوان المتجر: أولاً من قائمة المتاجر، ثم من Geocoder إذا لم يوجد
+    LaunchedEffect(p.storeName, p.storeLocation, stores) {
+        val match = stores.find { s ->
+            s.name == p.storeName &&
+                    s.latitude == p.storeLocation?.latitude &&
+                    s.longitude == p.storeLocation?.longitude
+        }
+        if (match != null && match.address.isNotBlank()) {
+            storeAddress = match.address
+        } else {
+            p.storeLocation?.let { loc ->
+                viewModel.getAddressFromLocation(context, loc) { result ->
+                    storeAddress = result
+                }
+            }
         }
     }
 
@@ -114,7 +135,9 @@ fun ProductDetailsScreen(
                             .savedStateHandle
                             .set("edit_product_id", p.id)
                     },
-                    modifier = Modifier.size(56.dp).padding(4.dp)
+                    modifier = Modifier
+                        .size(56.dp)
+                        .padding(4.dp)
                 ) {
                     Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = PrimaryColor)
                 }
@@ -137,9 +160,9 @@ fun ProductDetailsScreen(
                         contentDescription = "صورة المنتج",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(220.dp)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop
+                            .clip(RoundedCornerShape(16.dp))
+                            .aspectRatio(1.6f),
+                        contentScale = ContentScale.Fit
                     )
                 }
                 item {
@@ -159,22 +182,27 @@ fun ProductDetailsScreen(
                     item { Text("📉 أقل سعر: $minPrice د.ج", style = MaterialTheme.typography.bodyMedium) }
                     item { Text("📈 أعلى سعر: $maxPrice د.ج", style = MaterialTheme.typography.bodyMedium) }
                     item {
-                        Text("⚖️ متوسط السعر: ${"%.2f".format(avgPrice)} د.ج", style = MaterialTheme.typography.bodyMedium)
+                        Text("⚖️ متوسط السعر: ${"%.2f".format(avgPrice)} د.ج",
+                            style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 if (!isGeneral) {
                     item {
-                        Text("💰 السعر الحالي: ${p.price} د.ج", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4CAF50))
+                        Text(
+                            "💰 السعر الحالي: ${p.price} د.ج",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF4CAF50)
+                        )
                     }
+                    item { Text("🏬 المتجر: ${p.storeName}", style = MaterialTheme.typography.bodyMedium) }
                     item {
-                        Text("🏬 المتجر: ${p.storeName}", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    p.storeLocation?.let { loc ->
-                        item {
-                            Text(
-                                "🌍 الموقع: خط العرض ${loc.latitude}، خط الطول ${loc.longitude}",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                        if (storeAddress.isNotBlank()) {
+                            Text("📍 عنوان المتجر: $storeAddress",
+                                style = MaterialTheme.typography.bodyMedium)
+                        } else {
+                            Text("📍 جاري تحميل عنوان المتجر...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray)
                         }
                     }
                     item {
@@ -189,9 +217,11 @@ fun ProductDetailsScreen(
                                     )
                                 }
                                 Spacer(Modifier.width(8.dp))
-                                Text("(${ratingsCount} تقييمات)", style = MaterialTheme.typography.bodySmall)
+                                Text("(${ratingsCount} تقييمات)",
+                                    style = MaterialTheme.typography.bodySmall)
                             } else {
-                                Text("⭐ لا يوجد تقييم بعد", style = MaterialTheme.typography.bodySmall)
+                                Text("⭐ لا يوجد تقييم بعد",
+                                    style = MaterialTheme.typography.bodySmall)
                             }
                             Spacer(Modifier.width(8.dp))
                             TextButton(onClick = { showRatingDialog = true }) {
@@ -210,13 +240,21 @@ fun ProductDetailsScreen(
                                         try {
                                             val uid = FirebaseAuth.getInstance().uid
                                             if (uid.isNullOrEmpty()) {
-                                                Toast.makeText(context, "خطأ: المستخدم غير مسجل الدخول", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(
+                                                    context,
+                                                    "خطأ: المستخدم غير مسجل الدخول",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                                 return@launch
                                             }
                                             viewModel.rateProduct(p, selectedRating)
                                         } catch (e: Exception) {
                                             Log.e("RATE_ERROR", "فشل عند إرسال التقييم", e)
-                                            Toast.makeText(context, "حدث خطأ أثناء إرسال التقييم", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                "حدث خطأ أثناء إرسال التقييم",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                     }
                                 }
@@ -228,7 +266,6 @@ fun ProductDetailsScreen(
         }
     }
 }
-
 
 @Composable
 fun RatingDialogM2(

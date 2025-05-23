@@ -194,10 +194,7 @@ class ProductRepository @Inject constructor(
 
 
 
-    /** تحديث بيانات منتج موجود */
-    suspend fun updateProduct(product: Product) {
-        productsCollection.document(product.id).set(product).await()
-    }
+
 
     /** حذف منتج */
     suspend fun deleteProduct(productId: String) {
@@ -272,8 +269,14 @@ class ProductRepository @Inject constructor(
     }
 
     /** إضافة متجر جديد */
-    suspend fun addStore(name: String, location: GeoPoint) {
-        storesCollection.add(mapOf("name" to name, "location" to location)).await()
+    suspend fun addStore(name: String, location: GeoPoint, address: String = "") {
+        storesCollection.add(
+            mapOf(
+                "name" to name,
+                "location" to location,
+                "address" to address
+            )
+        ).await()
     }
 
     /** تدفق (Flow) لجميع المتاجر */
@@ -281,8 +284,9 @@ class ProductRepository @Inject constructor(
         val snapshot = storesCollection.get().await()
         emit(snapshot.documents.mapNotNull { doc ->
             val name = doc.getString("name")
-            val geo  = doc.getGeoPoint("location")
-            if (name != null && geo != null) Store(name, geo.latitude, geo.longitude)
+            val geo = doc.getGeoPoint("location")
+            val address = doc.getString("address") ?: ""
+            if (name != null && geo != null) Store(name, geo.latitude, geo.longitude, address)
             else null
         })
     }
@@ -501,6 +505,10 @@ class ProductRepository @Inject constructor(
     suspend fun getAllProducts(): List<Product> {
         val snapshot = productsCollection.get().await()
         return snapshot.documents.mapNotNull { parseProduct(it.id, it.data) }
+    }
+    /** تحديث بيانات منتج موجود */
+    suspend fun updateProduct(product: Product) {
+        productsCollection.document(product.id).set(product).await()
     }
 
 
